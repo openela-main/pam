@@ -1,0 +1,100 @@
+From 370064ef6f99581b08d473a42bb3417d5dda3e4e Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Thu, 17 Feb 2022 10:24:03 +0100
+Subject: [PATCH] pam_usertype: only use SYS_UID_MAX for system users
+
+* modules/pam_usertype/pam_usertype.c (pam_usertype_is_system): Stop
+using SYS_UID_MIN to check if it is a system account, because all
+accounts below the SYS_UID_MAX are system users.
+* modules/pam_usertype/pam_usertype.8.xml: Remove reference to SYS_UID_MIN
+as it is no longer used to calculate the system accounts.
+* configure.ac: Remove PAM_USERTYPE_SYSUIDMIN.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=1949137
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ configure.ac                            |  5 -----
+ modules/pam_usertype/pam_usertype.8.xml |  2 +-
+ modules/pam_usertype/pam_usertype.c     | 15 ++++++---------
+ 3 files changed, 7 insertions(+), 15 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index 639fc1ad..79113ad1 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -632,11 +632,6 @@ test -n "$opt_uidmin" ||
+           opt_uidmin=1000
+ AC_DEFINE_UNQUOTED(PAM_USERTYPE_UIDMIN, $opt_uidmin, [Minimum regular user uid.])
+ 
+-AC_ARG_WITH([sysuidmin], AS_HELP_STRING([--with-sysuidmin=<number>],[default value for system user min uid (101)]), opt_sysuidmin=$withval)
+-test -n "$opt_sysuidmin" ||
+-          opt_sysuidmin=101
+-AC_DEFINE_UNQUOTED(PAM_USERTYPE_SYSUIDMIN, $opt_sysuidmin, [Minimum system user uid.])
+-
+ AC_ARG_WITH([kernel-overflow-uid], AS_HELP_STRING([--with-kernel-overflow-uid=<number>],[kernel overflow uid, default (uint16_t)-2=65534]), opt_kerneloverflowuid=$withval)
+ test -n "$opt_kerneloverflowuid" ||
+           opt_kerneloverflowuid=65534
+diff --git a/modules/pam_usertype/pam_usertype.8.xml b/modules/pam_usertype/pam_usertype.8.xml
+index 7651da6e..d9307ba3 100644
+--- a/modules/pam_usertype/pam_usertype.8.xml
++++ b/modules/pam_usertype/pam_usertype.8.xml
+@@ -31,7 +31,7 @@
+       pam_usertype.so is designed to succeed or fail authentication
+       based on type of the account of the authenticated user.
+       The type of the account is decided with help of
+-      <emphasis>SYS_UID_MIN</emphasis> and <emphasis>SYS_UID_MAX</emphasis>
++      <emphasis>SYS_UID_MAX</emphasis>
+       settings in <emphasis>/etc/login.defs</emphasis>. One use is to select
+       whether to load other modules based on this test.
+     </para>
+diff --git a/modules/pam_usertype/pam_usertype.c b/modules/pam_usertype/pam_usertype.c
+index d03b73b5..cfd9c8bb 100644
+--- a/modules/pam_usertype/pam_usertype.c
++++ b/modules/pam_usertype/pam_usertype.c
+@@ -194,7 +194,6 @@ static int
+ pam_usertype_is_system(pam_handle_t *pamh, uid_t uid)
+ {
+     uid_t uid_min;
+-    uid_t sys_min;
+     uid_t sys_max;
+ 
+     if (uid == (uid_t)-1) {
+@@ -202,21 +201,19 @@ pam_usertype_is_system(pam_handle_t *pamh, uid_t uid)
+         return PAM_USER_UNKNOWN;
+     }
+ 
+-    if (uid <= 99) {
+-        /* Reserved. */
+-        return PAM_SUCCESS;
+-    }
+-
+     if (uid == PAM_USERTYPE_OVERFLOW_UID) {
+         /* nobody */
+         return PAM_SUCCESS;
+     }
+ 
+     uid_min = pam_usertype_get_id(pamh, "UID_MIN", PAM_USERTYPE_UIDMIN);
+-    sys_min = pam_usertype_get_id(pamh, "SYS_UID_MIN", PAM_USERTYPE_SYSUIDMIN);
+     sys_max = pam_usertype_get_id(pamh, "SYS_UID_MAX", uid_min - 1);
+ 
+-    return uid >= sys_min && uid <= sys_max ? PAM_SUCCESS : PAM_AUTH_ERR;
++    if (uid <= sys_max && uid < uid_min) {
++        return PAM_SUCCESS;
++    }
++
++    return PAM_AUTH_ERR;
+ }
+ 
+ static int
+@@ -253,7 +250,7 @@ pam_usertype_evaluate(struct pam_usertype_opts *opts,
+ 
+ /**
+  * Arguments:
+- * - issystem: uid in <SYS_UID_MIN, SYS_UID_MAX>
++ * - issystem: uid less than SYS_UID_MAX
+  * - isregular: not issystem
+  * - use_uid: use user that runs application not that is being authenticate (same as in pam_succeed_if)
+  * - audit: log unknown users to syslog
+-- 
+2.36.1
+
