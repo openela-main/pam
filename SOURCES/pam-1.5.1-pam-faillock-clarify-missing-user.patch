@@ -1,0 +1,53 @@
+From bcbf145ce925934214e48200c27c9ff736452549 Mon Sep 17 00:00:00 2001
+From: Deepak Das <ddas@redhat.com>
+Date: Mon, 10 Oct 2022 17:55:53 +0530
+Subject: [PATCH] pam_faillock: Clarify missing user faillock files after
+ reboot
+
+* modules/pam_faillock/faillock.conf.5.xml: Adding note related to missing
+user specific faillock files after reboot.
+
+* modules/pam_faillock/pam_faillock.8.xml: Adding note related to missing
+user specific faillock files after reboot.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2062512
+---
+ modules/pam_faillock/faillock.conf.5.xml | 4 ++++
+ modules/pam_faillock/pam_faillock.8.xml  | 6 ++++++
+ 2 files changed, 10 insertions(+)
+
+diff --git a/modules/pam_faillock/faillock.conf.5.xml b/modules/pam_faillock/faillock.conf.5.xml
+index 04a84107..8faa5915 100644
+--- a/modules/pam_faillock/faillock.conf.5.xml
++++ b/modules/pam_faillock/faillock.conf.5.xml
+@@ -44,6 +44,10 @@
+                   The directory where the user files with the failure records are kept. The
+                   default is <filename>/var/run/faillock</filename>.
+                 </para>
++                <para>
++                  Note: These files will disappear after reboot on systems configured with
++                  directory <filename>/var/run/faillock</filename> mounted on virtual memory.
++                </para>
+               </listitem>
+             </varlistentry>
+             <varlistentry>
+diff --git a/modules/pam_faillock/pam_faillock.8.xml b/modules/pam_faillock/pam_faillock.8.xml
+index 79bcbbd0..b7b7b0db 100644
+--- a/modules/pam_faillock/pam_faillock.8.xml
++++ b/modules/pam_faillock/pam_faillock.8.xml
+@@ -327,6 +327,12 @@ session  required       pam_selinux.so open
+         <term><filename>/var/run/faillock/*</filename></term>
+         <listitem>
+           <para>the files logging the authentication failures for users</para>
++          <para>
++            Note: These files will disappear after reboot on systems configured with
++            directory <filename>/var/run/faillock</filename> mounted on virtual memory.
++            For persistent storage use the option <emphasis>dir=</emphasis> in
++            file <filename>/etc/security/faillock.conf</filename>.
++          </para>
+         </listitem>
+       </varlistentry>
+       <varlistentry>
+-- 
+2.38.1
+

@@ -1,0 +1,79 @@
+From 55f206447a1e4ee26e307e7a9c069236e823b1a5 Mon Sep 17 00:00:00 2001
+From: Jeff Squyres <jsquyres@cisco.com>
+Date: Fri, 30 Apr 2021 15:16:38 -0700
+Subject: [PATCH 1/2] pam_misc: make length of misc_conv() configurable
+
+Add --with-misc-conv-bufsize=<number> option to configure to allow
+a longer buffer size for libpam_misc's misc_conv() function (it still
+defaults to 512 bytes).
+
+Signed-off-by: Jeff Squyres <jsquyres@cisco.com>
+---
+ configure.ac            | 7 +++++++
+ libpam_misc/misc_conv.c | 2 +-
+ 2 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/configure.ac b/configure.ac
+index 9c92d0de..b283db1b 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -648,6 +648,13 @@ case "$enable_unix" in
+   *) AC_MSG_ERROR([bad value $enable_unix for --enable-unix option]) ;;
+ esac
+ 
++AC_ARG_WITH([misc-conv-bufsize],
++AS_HELP_STRING([--with-misc-conv-bufsize=<number>],
++    [Size of input buffer for libpam_misc's misc_conv() conversation function, default=512]),
++    [],
++    [with_misc_conv_bufsize=512])
++AC_DEFINE_UNQUOTED(PAM_MISC_CONV_BUFSIZE, $with_misc_conv_bufsize, [libpam_misc misc_conv() buffer size.])
++
+ AM_CONDITIONAL([COND_BUILD_PAM_KEYINIT], [test "$have_key_syscalls" = 1])
+ AM_CONDITIONAL([COND_BUILD_PAM_LASTLOG], [test "$ac_cv_func_logwtmp" = yes])
+ AM_CONDITIONAL([COND_BUILD_PAM_NAMESPACE], [test "$ac_cv_func_unshare" = yes])
+diff --git a/libpam_misc/misc_conv.c b/libpam_misc/misc_conv.c
+index f28b1093..908ee890 100644
+--- a/libpam_misc/misc_conv.c
++++ b/libpam_misc/misc_conv.c
+@@ -18,7 +18,7 @@
+ #include <security/pam_appl.h>
+ #include <security/pam_misc.h>
+ 
+-#define INPUTSIZE PAM_MAX_RESP_SIZE          /* maximum length of input+1 */
++#define INPUTSIZE PAM_MISC_CONV_BUFSIZE      /* maximum length of input+1 */
+ #define CONV_ECHO_ON  1                            /* types of echo state */
+ #define CONV_ECHO_OFF 0
+ 
+-- 
+2.41.0
+
+
+From 80bfda5962e5be3daa70e0fc8c75fc97d1c55121 Mon Sep 17 00:00:00 2001
+From: Jeff Squyres <jsquyres@cisco.com>
+Date: Fri, 30 Apr 2021 15:28:33 -0700
+Subject: [PATCH 2/2] pam_misc: set default length of misc_conv() buffer to
+ 4096
+
+---
+ configure.ac | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/configure.ac b/configure.ac
+index b283db1b..8e5d0ff7 100644
+--- a/configure.ac
++++ b/configure.ac
+@@ -650,9 +650,9 @@ esac
+ 
+ AC_ARG_WITH([misc-conv-bufsize],
+ AS_HELP_STRING([--with-misc-conv-bufsize=<number>],
+-    [Size of input buffer for libpam_misc's misc_conv() conversation function, default=512]),
++    [Size of input buffer for libpam_misc's misc_conv() conversation function, default=4096]),
+     [],
+-    [with_misc_conv_bufsize=512])
++    [with_misc_conv_bufsize=4096])
+ AC_DEFINE_UNQUOTED(PAM_MISC_CONV_BUFSIZE, $with_misc_conv_bufsize, [libpam_misc misc_conv() buffer size.])
+ 
+ AM_CONDITIONAL([COND_BUILD_PAM_KEYINIT], [test "$have_key_syscalls" = 1])
+-- 
+2.41.0
+
