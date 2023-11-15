@@ -1,0 +1,37 @@
+From 10086bc69663fa819277af244eeb5b629a2403b8 Mon Sep 17 00:00:00 2001
+From: Deepak Das <ddas@redhat.com>
+Date: Mon, 10 Oct 2022 21:21:35 +0530
+Subject: [PATCH] pam_faillock: avoid logging an erroneous consecutive login
+ failure message
+
+* modules/pam_faillock/pam_faillock.c (write_tally): Avoid logging
+a consecutive login failure message for the root user in case when
+even_deny_root is not set.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2082442
+---
+ modules/pam_faillock/pam_faillock.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/modules/pam_faillock/pam_faillock.c b/modules/pam_faillock/pam_faillock.c
+index ddbb90e7..ca1c7035 100644
+--- a/modules/pam_faillock/pam_faillock.c
++++ b/modules/pam_faillock/pam_faillock.c
+@@ -374,9 +374,11 @@ write_tally(pam_handle_t *pamh, struct options *opts, struct tally_data *tallies
+ 		}
+ 		close(audit_fd);
+ #endif
+-		if (!(opts->flags & FAILLOCK_FLAG_NO_LOG_INFO)) {
+-			pam_syslog(pamh, LOG_INFO, "Consecutive login failures for user %s account temporarily locked",
+-				opts->user);
++		if (!(opts->flags & FAILLOCK_FLAG_NO_LOG_INFO) &&
++		    ((opts->flags & FAILLOCK_FLAG_DENY_ROOT) || (opts->uid != 0))) {
++			pam_syslog(pamh, LOG_INFO,
++				   "Consecutive login failures for user %s account temporarily locked",
++				   opts->user);
+ 		}
+ 	}
+ 
+-- 
+2.38.1
+

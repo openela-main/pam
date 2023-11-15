@@ -1,0 +1,29 @@
+diff -up Linux-PAM-1.3.1/configure.ac.pam-misc-configurable Linux-PAM-1.3.1/configure.ac
+--- Linux-PAM-1.3.1/configure.ac.pam-misc-configurable	2023-06-26 09:57:00.243146563 +0200
++++ Linux-PAM-1.3.1/configure.ac	2023-06-26 09:59:45.353636685 +0200
+@@ -621,6 +621,13 @@ if test x"$opt_kerneloverflowuid" == x;
+ fi
+ AC_DEFINE_UNQUOTED(PAM_USERTYPE_OVERFLOW_UID, $opt_kerneloverflowuid, [Kernel overflow uid.])
+ 
++AC_ARG_WITH([misc-conv-bufsize],
++AS_HELP_STRING([--with-misc-conv-bufsize=<number>],
++    [Size of input buffer for libpam_misc's misc_conv() conversation function, default=4096]),
++    [],
++    [with_misc_conv_bufsize=4096])
++AC_DEFINE_UNQUOTED(PAM_MISC_CONV_BUFSIZE, $with_misc_conv_bufsize, [libpam_misc misc_conv() buffer size.])
++
+ dnl Files to be created from when we run configure
+ AC_CONFIG_FILES([Makefile libpam/Makefile libpamc/Makefile libpamc/test/Makefile \
+ 	libpam_misc/Makefile conf/Makefile conf/pam_conv1/Makefile \
+diff -up Linux-PAM-1.3.1/libpam_misc/misc_conv.c.pam-misc-configurable Linux-PAM-1.3.1/libpam_misc/misc_conv.c
+--- Linux-PAM-1.3.1/libpam_misc/misc_conv.c.pam-misc-configurable	2023-06-26 09:57:00.242146560 +0200
++++ Linux-PAM-1.3.1/libpam_misc/misc_conv.c	2023-06-26 10:00:38.023787972 +0200
+@@ -18,7 +18,7 @@
+ #include <security/pam_appl.h>
+ #include <security/pam_misc.h>
+ 
+-#define INPUTSIZE PAM_MAX_MSG_SIZE           /* maximum length of input+1 */
++#define INPUTSIZE PAM_MISC_CONV_BUFSIZE      /* maximum length of input+1 */
+ #define CONV_ECHO_ON  1                            /* types of echo state */
+ #define CONV_ECHO_OFF 0
+ 
