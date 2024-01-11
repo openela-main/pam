@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 14%{?dist}
+Release: 15%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -48,6 +48,9 @@ Patch11: pam-1.5.1-pam-lastlog-check-localtime_r-return-value.patch
 Patch12: pam-1.5.1-pam-faillock-clarify-missing-user.patch
 # https://github.com/linux-pam/linux-pam/commit/10086bc69663fa819277af244eeb5b629a2403b8
 Patch13: pam-1.5.1-pam-faillock-avoid-logging-erroneous.patch
+# https://github.com/linux-pam/linux-pam/commit/55f206447a1e4ee26e307e7a9c069236e823b1a5
+# https://github.com/linux-pam/linux-pam/commit/80bfda5962e5be3daa70e0fc8c75fc97d1c55121
+Patch14: pam-1.5.1-pam-misc-configurable.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -143,6 +146,7 @@ cp %{SOURCE18} .
 %patch11 -p1 -b .pam-lastlog-check-localtime_r-return-value
 %patch12 -p1 -b .pam-faillock-clarify-missing-user
 %patch13 -p1 -b .pam-faillock-avoid-logging-erroneous
+%patch14 -p1 -b .pam-misc-configurable
 
 autoreconf -i
 
@@ -398,6 +402,9 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
+* Mon Jun 26 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-15
+- pam_misc: make length of misc_conv() configurable and set to 4096. Resolves: #2215007
+
 * Tue Nov 29 2022 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-14
 - pam_lastlog: check localtime_r() return value. Resolves: #2130124
 - pam_faillock: clarify missing user faillock files after reboot. Resolves: #2126632
