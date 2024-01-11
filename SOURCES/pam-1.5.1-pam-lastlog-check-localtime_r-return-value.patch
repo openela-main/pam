@@ -1,0 +1,41 @@
+From 40c271164dbcebfc5304d0537a42fb42e6b6803c Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Mon, 26 Sep 2022 12:16:53 +0200
+Subject: [PATCH] pam_lastlog: check localtime_r() return value
+
+Check the return value of localtime_r() before calling strftime(). This
+function crashes if the argument is NULL.
+
+Resolves: https://bugzilla.redhat.com/show_bug.cgi?id=2012871
+
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_lastlog/pam_lastlog.c | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/modules/pam_lastlog/pam_lastlog.c b/modules/pam_lastlog/pam_lastlog.c
+index abd048df..121e7560 100644
+--- a/modules/pam_lastlog/pam_lastlog.c
++++ b/modules/pam_lastlog/pam_lastlog.c
+@@ -573,12 +573,12 @@ last_login_failed(pam_handle_t *pamh, int announce, const char *user, time_t llt
+ 	    time_t lf_time;
+ 
+ 	    lf_time = utuser.ut_tv.tv_sec;
+-	    tm = localtime_r (&lf_time, &tm_buf);
+-	    strftime (the_time, sizeof (the_time),
+-	        /* TRANSLATORS: "strftime options for date of last login" */
+-		_(" %a %b %e %H:%M:%S %Z %Y"), tm);
+-
+-	    date = the_time;
++	    if ((tm = localtime_r (&lf_time, &tm_buf)) != NULL) {
++	        strftime (the_time, sizeof (the_time),
++	            /* TRANSLATORS: "strftime options for date of last login" */
++	                  _(" %a %b %e %H:%M:%S %Z %Y"), tm);
++	        date = the_time;
++	    }
+ 	}
+ 
+ 	/* we want & have the host? */
+-- 
+2.38.1
+

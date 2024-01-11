@@ -1,0 +1,99 @@
+From 3234488f2c52a021eec87df1990d256314c21bff Mon Sep 17 00:00:00 2001
+From: Josef Moellers <jmoellers@suse.de>
+Date: Wed, 14 Apr 2021 16:39:28 +0200
+Subject: [PATCH] pam_limits: "Unlimited" is not a valid value for
+ RLIMIT_NOFILE.
+
+Replace it with a value obtained from /proc/sys/fs/nr_open
+
+* modules/pam_limits/limits.conf.5.xml: Document the replacement.
+* modules/pam_limits/pam_limits.c: Replace unlimited RLIMIT_NOFILE
+  value with a value obtained from /proc/sys/fs/nr_open
+---
+ modules/pam_limits/limits.conf.5.xml |  2 ++
+ modules/pam_limits/pam_limits.c      | 49 ++++++++++++++++++++++++++++
+ 2 files changed, 51 insertions(+)
+
+diff --git a/modules/pam_limits/limits.conf.5.xml b/modules/pam_limits/limits.conf.5.xml
+index cd64ac90..c5bd6768 100644
+--- a/modules/pam_limits/limits.conf.5.xml
++++ b/modules/pam_limits/limits.conf.5.xml
+@@ -283,6 +283,8 @@
+       <emphasis>unlimited</emphasis> or <emphasis>infinity</emphasis> indicating no limit,
+       except for <emphasis remap='B'>priority</emphasis>, <emphasis remap='B'>nice</emphasis>,
+       and <emphasis remap='B'>nonewprivs</emphasis>.
++      If <emphasis remap='B'>nofile</emphasis> is to be set to one of these values,
++      it will be set to the contents of /proc/sys/fs/nr_open instead (see setrlimit(3)).
+     </para>
+     <para>
+       If a hard limit or soft limit of a resource is set to a valid value,
+diff --git a/modules/pam_limits/pam_limits.c b/modules/pam_limits/pam_limits.c
+index 10049973..7cc45d77 100644
+--- a/modules/pam_limits/pam_limits.c
++++ b/modules/pam_limits/pam_limits.c
+@@ -487,6 +487,41 @@ static int init_limits(pam_handle_t *pamh, struct pam_limit_s *pl, int ctrl)
+     return retval;
+ }
+ 
++/*
++ * Read the contents of <pathname> and return it in *valuep
++ * return 1 if conversion succeeds, result is in *valuep
++ * return 0 if conversion fails, *valuep is untouched.
++ */
++static int
++value_from_file(const char *pathname, rlim_t *valuep)
++{
++    char buf[128];
++    FILE *fp;
++    int retval;
++
++    retval = 0;
++
++    if ((fp = fopen(pathname, "r")) != NULL) {
++	if (fgets(buf, sizeof(buf), fp) != NULL) {
++	    char *endptr;
++	    unsigned long long value;
++
++	    errno = 0;
++	    value = strtoull(buf, &endptr, 10);
++	    if (endptr != buf &&
++		(value != ULLONG_MAX || errno == 0) &&
++                (unsigned long long) (rlim_t) value == value) {
++		*valuep = (rlim_t) value;
++		retval = 1;
++	    }
++	}
++
++	fclose(fp);
++    }
++
++    return retval;
++}
++
+ static void
+ process_limit (const pam_handle_t *pamh, int source, const char *lim_type,
+ 	       const char *lim_item, const char *lim_value,
+@@ -666,6 +701,20 @@ process_limit (const pam_handle_t *pamh, int source, const char *lim_type,
+ 	 rlimit_value = 20 - int_value;
+          break;
+ #endif
++	case RLIMIT_NOFILE:
++	/*
++	 * If nofile is to be set to "unlimited", try to set it to
++	 * the value in /proc/sys/fs/nr_open instead.
++	 */
++	if (rlimit_value == RLIM_INFINITY) {
++	    if (!value_from_file("/proc/sys/fs/nr_open", &rlimit_value))
++		pam_syslog(pamh, LOG_WARNING,
++			   "Cannot set \"nofile\" to a sensible value");
++	    else if (ctrl & PAM_DEBUG_ARG)
++		pam_syslog(pamh, LOG_DEBUG, "Setting \"nofile\" limit to %llu",
++			   (unsigned long long) rlimit_value);
++	}
++	break;
+     }
+ 
+     if ( (limit_item != LIMIT_LOGIN)
+-- 
+2.33.1
+

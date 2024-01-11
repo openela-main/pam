@@ -1,0 +1,42 @@
+From ec0e724fe53188c5c762c34ca9db6681c0de01b8 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Thu, 1 Jul 2021 12:14:29 +0200
+Subject: [PATCH] pam_filter: Close file after controlling tty
+
+Failing to check the descriptor value meant that there was a bug in the
+attempt to close the controlling tty. Moreover, this would lead to a
+file descriptor leak as pointed out by the static analyzer tool:
+
+Error: RESOURCE_LEAK (CWE-772): [#def26]
+Linux-PAM-1.5.1/modules/pam_filter/pam_filter.c:356: open_fn: Returning handle opened by "open". [Note: The source code implementation of the function has been overridden by a user model.]
+Linux-PAM-1.5.1/modules/pam_filter/pam_filter.c:356: var_assign: Assigning: "t" = handle returned from "open("/dev/tty", 2)".
+Linux-PAM-1.5.1/modules/pam_filter/pam_filter.c:357: off_by_one: Testing whether handle "t" is strictly greater than zero is suspicious.  "t" leaks when it is zero.
+Linux-PAM-1.5.1/modules/pam_filter/pam_filter.c:357: remediation: Did you intend to include equality with zero?
+Linux-PAM-1.5.1/modules/pam_filter/pam_filter.c:367: leaked_handle: Handle variable "t" going out of scope leaks the handle.
+  365|   		pam_syslog(pamh, LOG_ERR,
+  366|   			   "child cannot become new session: %m");
+  367|-> 		return PAM_ABORT;
+  368|   	    }
+  369|
+
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_filter/pam_filter.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/pam_filter/pam_filter.c b/modules/pam_filter/pam_filter.c
+index 2f0af4fb..6e6def37 100644
+--- a/modules/pam_filter/pam_filter.c
++++ b/modules/pam_filter/pam_filter.c
+@@ -354,7 +354,7 @@ set_filter (pam_handle_t *pamh, int flags UNUSED, int ctrl,
+ 	    int t = open("/dev/tty", O_RDWR|O_NOCTTY);
+ #else
+ 	    int t = open("/dev/tty",O_RDWR);
+-	    if (t > 0) {
++	    if (t >= 0) {
+ 		(void) ioctl(t, TIOCNOTTY, NULL);
+ 		close(t);
+ 	    }
+-- 
+2.31.1
+
