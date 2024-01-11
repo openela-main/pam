@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 25%{?dist}
+Release: 27%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -97,6 +97,9 @@ Patch62: pam-1.5.1-pam-lastlog-check-localtime_r-return-value.patch
 Patch63: pam-1.5.1-pam-faillock-clarify-missing-user.patch
 # https://github.com/linux-pam/linux-pam/commit/10086bc69663fa819277af244eeb5b629a2403b8
 Patch64: pam-1.5.1-pam-faillock-avoid-logging-erroneous.patch
+# https://github.com/linux-pam/linux-pam/commit/55f206447a1e4ee26e307e7a9c069236e823b1a5
+# https://github.com/linux-pam/linux-pam/commit/80bfda5962e5be3daa70e0fc8c75fc97d1c55121
+Patch65: pam-1.3.1-pam-misc-configurable.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -209,6 +212,7 @@ cp %{SOURCE18} .
 %patch62 -p1 -b .pam-lastlog-check-localtime_r-return-value
 %patch63 -p1 -b .pam-faillock-clarify-missing-user
 %patch64 -p1 -b .pam-faillock-avoid-logging-erroneous
+%patch65 -p1 -b .pam-misc-configurable
 
 autoreconf -i
 
@@ -462,6 +466,12 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Mon Jun 26 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-27
+- pam_misc: make length of misc_conv() configurable and set to 4096. Resolves: #2209785
+
+* Tue May 16 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-26
+- smartcard-auth: modify the content to remove unnecessary modules. Resolves: #1983683
+
 * Tue Nov 29 2022 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-25
 - pam_motd: avoid unnecessary logging. Resolves: #2091062
 - pam_lastlog: check localtime_r() return value. Resolves: #2012871
