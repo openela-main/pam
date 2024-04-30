@@ -1,0 +1,55 @@
+diff -up Linux-PAM-1.5.1/configure.ac.libpam-close-range Linux-PAM-1.5.1/configure.ac
+--- Linux-PAM-1.5.1/configure.ac.libpam-close-range	2023-11-10 10:35:00.142833269 +0100
++++ Linux-PAM-1.5.1/configure.ac	2023-11-10 10:36:29.158987392 +0100
+@@ -552,6 +552,7 @@ AC_CHECK_FUNCS(inet_ntop inet_pton innet
+ AC_CHECK_FUNCS(quotactl)
+ AC_CHECK_FUNCS(unshare)
+ AC_CHECK_FUNCS([ruserok_af ruserok], [break])
++AC_CHECK_FUNCS(close_range)
+ BACKUP_LIBS=$LIBS
+ LIBS="$LIBS -lutil"
+ AC_CHECK_FUNCS([logwtmp])
+diff -up Linux-PAM-1.5.1/libpam/pam_modutil_sanitize.c.libpam-close-range Linux-PAM-1.5.1/libpam/pam_modutil_sanitize.c
+--- Linux-PAM-1.5.1/libpam/pam_modutil_sanitize.c.libpam-close-range	2020-11-25 17:57:02.000000000 +0100
++++ Linux-PAM-1.5.1/libpam/pam_modutil_sanitize.c	2023-11-10 10:35:00.142833269 +0100
+@@ -11,6 +11,10 @@
+ #include <syslog.h>
+ #include <sys/resource.h>
+ 
++#ifndef CLOSE_RANGE_UNSHARE
++#define CLOSE_RANGE_UNSHARE	(1U << 1)
++#endif /* CLOSE_RANGE_UNSHARE */
++
+ /*
+  * Creates a pipe, closes its write end, redirects fd to its read end.
+  * Returns fd on success, -1 otherwise.
+@@ -84,9 +88,8 @@ redirect_out(pam_handle_t *pamh, enum pa
+ 	return fd;
+ }
+ 
+-/* Closes all descriptors after stderr. */
+ static void
+-close_fds(void)
++close_fds_iteratively(void)
+ {
+ 	/*
+ 	 * An arbitrary upper limit for the maximum file descriptor number
+@@ -111,6 +114,18 @@ close_fds(void)
+ 		close(fd);
+ }
+ 
++/* Closes all descriptors after stderr. */
++static void
++close_fds(void)
++{
++#ifdef HAVE_CLOSE_RANGE
++	if (close_range(STDERR_FILENO+1, -1U, CLOSE_RANGE_UNSHARE) == 0)
++		return;
++#endif /* HAVE_CLOSE_RANGE */
++
++	close_fds_iteratively();
++}
++
+ int
+ pam_modutil_sanitize_helper_fds(pam_handle_t *pamh,
+ 				enum pam_modutil_redirect_fd stdin_mode,

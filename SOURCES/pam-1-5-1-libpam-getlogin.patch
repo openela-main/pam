@@ -1,0 +1,144 @@
+From 244b46908df930626535c0cd7c2867407fe8714a Mon Sep 17 00:00:00 2001
+From: Thorsten Kukuk <kukuk@suse.com>
+Date: Tue, 14 Feb 2023 14:57:40 +0100
+Subject: [PATCH] libpam: use getlogin() from libc and not utmp
+
+ utmp uses 32bit time_t for compatibility with 32bit userland on some
+ 64bit systems and is thus not Y2038 safe. Use getlogin() from libc
+ which avoids using utmp and is more safe than the old utmp-based
+ implementation by using /proc/self/loginuid.
+
+ * libpam/pam_modutil_getlogin.c: Use getlogin() instead of parsing utmp
+---
+ libpam/pam_modutil_getlogin.c | 52 ++++++++---------------------------
+ 1 file changed, 11 insertions(+), 41 deletions(-)
+
+diff --git a/libpam/pam_modutil_getlogin.c b/libpam/pam_modutil_getlogin.c
+index 04a20fd8..633dd676 100644
+--- a/libpam/pam_modutil_getlogin.c
++++ b/libpam/pam_modutil_getlogin.c
+@@ -10,7 +10,6 @@
+ 
+ #include <stdlib.h>
+ #include <unistd.h>
+-#include <utmp.h>
+ 
+ #define _PAMMODUTIL_GETLOGIN "_pammodutil_getlogin"
+ 
+@@ -19,62 +18,33 @@ pam_modutil_getlogin(pam_handle_t *pamh)
+ {
+     int status;
+     const void *logname;
+-    const void *void_curr_tty;
+-    const char *curr_tty;
+     char *curr_user;
+-    struct utmp *ut, line;
++    size_t curr_user_len;
+ 
+     status = pam_get_data(pamh, _PAMMODUTIL_GETLOGIN, &logname);
+     if (status == PAM_SUCCESS) {
+ 	return logname;
+     }
+ 
+-    status = pam_get_item(pamh, PAM_TTY, &void_curr_tty);
+-    if ((status != PAM_SUCCESS) || (void_curr_tty == NULL))
+-      curr_tty = ttyname(0);
+-    else
+-      curr_tty = (const char*)void_curr_tty;
+-
+-    if (curr_tty == NULL) {
+-	return NULL;
+-    }
+-
+-    if (curr_tty[0] == '/') {   /* full path */
+-        const char *t;
+-	curr_tty++;
+-	if ((t = strchr(curr_tty, '/')) != NULL) {
+-	  curr_tty = t + 1;
+-	}
++    logname = getlogin();
++    if (logname == NULL) {
++      return NULL;
+     }
+-    logname = NULL;
+ 
+-    setutent();
+-    strncpy(line.ut_line, curr_tty, sizeof(line.ut_line));
+-
+-    if ((ut = getutline(&line)) == NULL) {
+-	goto clean_up_and_go_home;
+-    }
+-
+-    curr_user = calloc(sizeof(line.ut_user)+1, 1);
++    curr_user_len = strlen(logname)+1;
++    curr_user = calloc(curr_user_len, 1);
+     if (curr_user == NULL) {
+-	goto clean_up_and_go_home;
++      return NULL;
+     }
+ 
+-    strncpy(curr_user, ut->ut_user, sizeof(ut->ut_user));
+-    /* calloc already zeroed the memory */
++    memcpy(curr_user, logname, curr_user_len);
+ 
+     status = pam_set_data(pamh, _PAMMODUTIL_GETLOGIN, curr_user,
+ 			  pam_modutil_cleanup);
+     if (status != PAM_SUCCESS) {
+-	free(curr_user);
+-	goto clean_up_and_go_home;
++      free(curr_user);
++      return NULL;
+     }
+ 
+-    logname = curr_user;
+-
+-clean_up_and_go_home:
+-
+-    endutent();
+-
+-    return logname;
++    return curr_user;
+ }
+-- 
+2.43.0
+
+From f26d873435be9f35fa7953493cc07a9bc4e31876 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Christian=20G=C3=B6ttsche?= <cgzones@googlemail.com>
+Date: Sat, 18 Feb 2023 14:37:04 +0100
+Subject: [PATCH] libpam: simplify string copying using strdup
+
+---
+ libpam/pam_modutil_getlogin.c | 6 +-----
+ 1 file changed, 1 insertion(+), 5 deletions(-)
+
+diff --git a/libpam/pam_modutil_getlogin.c b/libpam/pam_modutil_getlogin.c
+index 633dd676..2e7a0116 100644
+--- a/libpam/pam_modutil_getlogin.c
++++ b/libpam/pam_modutil_getlogin.c
+@@ -19,7 +19,6 @@ pam_modutil_getlogin(pam_handle_t *pamh)
+     int status;
+     const void *logname;
+     char *curr_user;
+-    size_t curr_user_len;
+ 
+     status = pam_get_data(pamh, _PAMMODUTIL_GETLOGIN, &logname);
+     if (status == PAM_SUCCESS) {
+@@ -31,14 +30,11 @@ pam_modutil_getlogin(pam_handle_t *pamh)
+       return NULL;
+     }
+ 
+-    curr_user_len = strlen(logname)+1;
+-    curr_user = calloc(curr_user_len, 1);
++    curr_user = strdup(logname);
+     if (curr_user == NULL) {
+       return NULL;
+     }
+ 
+-    memcpy(curr_user, logname, curr_user_len);
+-
+     status = pam_set_data(pamh, _PAMMODUTIL_GETLOGIN, curr_user,
+ 			  pam_modutil_cleanup);
+     if (status != PAM_SUCCESS) {
+-- 
+2.43.0
+

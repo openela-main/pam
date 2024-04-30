@@ -1,0 +1,72 @@
+From c85513220c1bd3150e39c6277422d29cfa44acc7 Mon Sep 17 00:00:00 2001
+From: Steve Grubb <sgrubb@redhat.com>
+Date: Thu, 27 Jul 2023 13:14:42 -0400
+Subject: [PATCH 1/2] pam_faillock: fix formatting of audit messages
+
+pam_faillock uses audit_log_user_message to write to the audit system.
+It does not take an op argument, so you have to add one yourself. Otherwise
+the pam_faillock part of the message is lost because it's not in key=value
+format.
+
+Also, we can't use uid in that event because the kernel already adds that
+field. What we normally do is use 'suid' (meaning sender uid) as the
+field name.
+---
+ modules/pam_faillock/pam_faillock.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/modules/pam_faillock/pam_faillock.c b/modules/pam_faillock/pam_faillock.c
+index ca1c7035..a89909ab 100644
+--- a/modules/pam_faillock/pam_faillock.c
++++ b/modules/pam_faillock/pam_faillock.c
+@@ -248,7 +248,7 @@ check_tally(pam_handle_t *pamh, struct options *opts, struct tally_data *tallies
+ 
+ 				(void)pam_get_item(pamh, PAM_TTY, &tty);
+ 				(void)pam_get_item(pamh, PAM_RHOST, &rhost);
+-				snprintf(buf, sizeof(buf), "pam_faillock uid=%u ", opts->uid);
++				snprintf(buf, sizeof(buf), "op=pam_faillock suid=%u ", opts->uid);
+ 				audit_log_user_message(audit_fd, AUDIT_RESP_ACCT_UNLOCK_TIMED, buf,
+ 					rhost, NULL, tty, 1);
+ 			}
+@@ -364,7 +364,7 @@ write_tally(pam_handle_t *pamh, struct options *opts, struct tally_data *tallies
+ 			errno == EAFNOSUPPORT))
+ 			return PAM_SYSTEM_ERR;
+ 
+-		snprintf(buf, sizeof(buf), "pam_faillock uid=%u ", opts->uid);
++		snprintf(buf, sizeof(buf), "op=pam_faillock suid=%u ", opts->uid);
+ 		audit_log_user_message(audit_fd, AUDIT_ANOM_LOGIN_FAILURES, buf,
+ 			NULL, NULL, NULL, 1);
+ 
+-- 
+2.41.0
+
+
+From 1648734a69c31e9ce834da70144ac9a453296807 Mon Sep 17 00:00:00 2001
+From: Steve Grubb <sgrubb@redhat.com>
+Date: Fri, 4 Aug 2023 17:45:45 -0400
+Subject: [PATCH 2/2] pam_selinux: fix formatting of audit messages
+
+pam_selinux uses audit_log_user_message to write to the audit system.
+It does not take an op argument, so you have to add one yourself. Otherwise
+the pam_selinux part of the message is lost because it's not in key=value
+format.
+---
+ modules/pam_selinux/pam_selinux.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/pam_selinux/pam_selinux.c b/modules/pam_selinux/pam_selinux.c
+index e52e0fc4..713b3f73 100644
+--- a/modules/pam_selinux/pam_selinux.c
++++ b/modules/pam_selinux/pam_selinux.c
+@@ -97,7 +97,7 @@ send_audit_message(const pam_handle_t *pamh, int success, const char *default_co
+ 		pam_syslog(pamh, LOG_ERR, "Error translating selected context '%s'.", selected_context);
+ 		selected_raw = NULL;
+ 	}
+-	if (asprintf(&msg, "pam: default-context=%s selected-context=%s",
++	if (asprintf(&msg, "op=pam_selinux default-context=%s selected-context=%s",
+ 		     default_raw ? default_raw : (default_context ? default_context : "?"),
+ 		     selected_raw ? selected_raw : (selected_context ? selected_context : "?")) < 0) {
+ 		msg = NULL; /* asprintf leaves msg in undefined state on failure */
+-- 
+2.41.0
+

@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 15%{?dist}
+Release: 19%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -51,6 +51,20 @@ Patch13: pam-1.5.1-pam-faillock-avoid-logging-erroneous.patch
 # https://github.com/linux-pam/linux-pam/commit/55f206447a1e4ee26e307e7a9c069236e823b1a5
 # https://github.com/linux-pam/linux-pam/commit/80bfda5962e5be3daa70e0fc8c75fc97d1c55121
 Patch14: pam-1.5.1-pam-misc-configurable.patch
+# https://github.com/linux-pam/linux-pam/commit/d6103b30050554d7b6ca6d55cb5b4ed3c9516663
+Patch15: pam-1.5.1-libpam-close-range.patch
+# https://github.com/linux-pam/linux-pam/commit/c85513220c1bd3150e39c6277422d29cfa44acc7
+# https://github.com/linux-pam/linux-pam/commit/1648734a69c31e9ce834da70144ac9a453296807
+Patch16: pam-1.5.1-audit-messages-formatting.patch
+# https://github.com/linux-pam/linux-pam/commit/d54870f993e97fe75e2cd0470a3701d5af22877c
+Patch17: pam-1.5.1-faillock-create-tallydir.patch
+# https://github.com/linux-pam/linux-pam/commit/244b46908df930626535c0cd7c2867407fe8714a
+# https://github.com/linux-pam/linux-pam/commit/f26d873435be9f35fa7953493cc07a9bc4e31876
+Patch18: pam-1-5-1-libpam-getlogin.patch
+# https://github.com/linux-pam/linux-pam/commit/23393bef92c1e768eda329813d7af55481c6ca9f
+Patch19: pam-1.5.1-access-handle-hostnames.patch
+# https://github.com/linux-pam/linux-pam/commit/031bb5a5d0d950253b68138b498dc93be69a64cb
+Patch20: pam-1.5.1-namespace-protect-dir.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -147,6 +161,12 @@ cp %{SOURCE18} .
 %patch12 -p1 -b .pam-faillock-clarify-missing-user
 %patch13 -p1 -b .pam-faillock-avoid-logging-erroneous
 %patch14 -p1 -b .pam-misc-configurable
+%patch15 -p1 -b .libpam-close-range
+%patch16 -p1 -b .audit-messages-formatting
+%patch17 -p1 -b .faillock-create-tallydir
+%patch18 -p1 -b .libpam-getlogin
+%patch19 -p1 -b .access-handle-hostnames
+%patch20 -p1 -b .namespace-protect-dir
 
 autoreconf -i
 
@@ -402,6 +422,21 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
+* Mon Feb 12 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-19
+- pam_namespace: protect_dir(): use O_DIRECTORY to prevent local DoS
+  situations. CVE-2024-22365. Resolves: RHEL-21244
+
+* Fri Jan 26 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-18
+- libpam: use getlogin() from libc and not utmp. Resolves: RHEL-16727
+- pam_access: handle hostnames in access.conf. Resolves: RHEL-22300
+
+* Mon Jan  8 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-17
+- pam_faillock: create tallydir before creating tallyfile. Resolves: RHEL-20943
+
+* Fri Nov 10 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-16
+- libpam: use close_range() to close file descriptors. Resolves: RHEL-5099
+- fix formatting of audit messages. Resolves: RHEL-5100
+
 * Mon Jun 26 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-15
 - pam_misc: make length of misc_conv() configurable and set to 4096. Resolves: #2215007
 
