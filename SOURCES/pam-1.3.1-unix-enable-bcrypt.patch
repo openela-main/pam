@@ -1,0 +1,174 @@
+From f7abb8c1ef3aa31e6c2564a8aaf69683a77c2016 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?Bj=C3=B6rn=20Esser?= <besser82@fedoraproject.org>
+Date: Thu, 15 Nov 2018 15:01:57 +0100
+Subject: [PATCH] pam_unix: Use bcrypt b-variant for computing new hashes.
+
+Bcrypt hashes used the "$2a$" prefix since 1997.
+However, in 2011 an implementation bug was discovered in bcrypt
+affecting the handling of characters in passphrases with the 8th
+bit set.
+
+Besides fixing the bug, OpenBSD 5.5 introduced the "$2b$" prefix
+for a behavior that exactly matches crypt_blowfish's "$2y$", and
+the crypt_blowfish implementation supports it as well since v1.1.
+
+That said new computed bcrypt hashes should use the "$2b$" prefix.
+
+* modules/pam_unix/passverify.c: Use bcrypt b-variant.
+---
+ modules/pam_unix/passverify.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/modules/pam_unix/passverify.c b/modules/pam_unix/passverify.c
+index 9c1771e2..1f433b3a 100644
+--- a/modules/pam_unix/passverify.c
++++ b/modules/pam_unix/passverify.c
+@@ -385,7 +385,7 @@ PAMH_ARG_DECL(char * create_password_hash,
+ 		/* algoid = "$1" */
+ 		return crypt_md5_wrapper(password);
+ 	} else if (on(UNIX_BLOWFISH_PASS, ctrl)) {
+-		algoid = "$2a$";
++		algoid = "$2b$";
+ 	} else if (on(UNIX_SHA256_PASS, ctrl)) {
+ 		algoid = "$5$";
+ 	} else if (on(UNIX_SHA512_PASS, ctrl)) {
+-- 
+2.41.0
+
+diff -up Linux-PAM-1.3.1/configure.ac.legacy-xcrypt Linux-PAM-1.3.1/configure.ac
+--- Linux-PAM-1.3.1/configure.ac.legacy-xcrypt	2023-10-26 12:08:46.896437225 +0200
++++ Linux-PAM-1.3.1/configure.ac	2023-10-26 12:10:38.289654696 +0200
+@@ -395,19 +395,32 @@ AC_SUBST(LIBAUDIT)
+ AM_CONDITIONAL([HAVE_AUDIT_TTY_STATUS],
+ 	       [test "x$HAVE_AUDIT_TTY_STATUS" = xyes])
+ 
+-AC_CHECK_HEADERS(xcrypt.h crypt.h)
+-AS_IF([test "x$ac_cv_header_xcrypt_h" = "xyes"],
+-  [crypt_libs="xcrypt crypt"],
+-  [crypt_libs="crypt"])
++AC_CHECK_HEADERS(crypt.h)
+ 
+ BACKUP_LIBS=$LIBS
+-AC_SEARCH_LIBS([crypt],[$crypt_libs], LIBCRYPT="${ac_lib:+-l$ac_lib}", LIBCRYPT="")
+-AC_CHECK_FUNCS(crypt_r crypt_gensalt_r)
++LIBCRYPT=""
++PKG_CHECK_MODULES([CRYPT], [libcrypt], [
++  CFLAGS="$CFLAGS $CRYPT_CFLAGS"
++  CPPFLAGS="$CPPFLAGS $CRYPT_CFLAGS"
++  LIBS="$LIBS $CRYPT_LIBS"
++  LIBCRYPT="$CRYPT_LIBS"
++], [
++  AC_SEARCH_LIBS([crypt_gensalt_rn],[crypt])
++  case "$ac_cv_search_crypt_gensalt_rn" in
++	-l*) LIBCRYPT="$ac_cv_search_crypt_gensalt_rn" ;;
++	no) AC_SEARCH_LIBS([crypt_r],[crypt])
++		case "$ac_cv_search_crypt_r" in
++		-l*) LIBCRYPT="$ac_cv_search_crypt_r" ;;
++		no ) AC_SEARCH_LIBS([crypt],[crypt])
++		case "$ac_cv_search_crypt" in
++			-l*) LIBCRYPT="$ac_cv_search_crypt" ;;
++		esac ;;
++	esac ;;
++  esac
++])
++AC_CHECK_FUNCS([crypt_r])
+ LIBS=$BACKUP_LIBS
+ AC_SUBST(LIBCRYPT)
+-if test "$LIBCRYPT" = "-lxcrypt" -a "$ac_cv_header_xcrypt_h" = "yes" ; then
+-	AC_DEFINE([HAVE_LIBXCRYPT], 1, [Define to 1 if xcrypt support should be compiled in.])
+-fi
+ 
+ AC_ARG_WITH([randomdev], AS_HELP_STRING([--with-randomdev=(<path>|yes|no)],[use specified random device instead of /dev/urandom or 'no' to disable]), opt_randomdev=$withval)
+ if test "$opt_randomdev" = yes -o -z "$opt_randomdev"; then
+diff -up Linux-PAM-1.3.1/modules/pam_pwhistory/opasswd.c.legacy-xcrypt Linux-PAM-1.3.1/modules/pam_pwhistory/opasswd.c
+--- Linux-PAM-1.3.1/modules/pam_pwhistory/opasswd.c.legacy-xcrypt	2023-10-26 12:08:46.896437225 +0200
++++ Linux-PAM-1.3.1/modules/pam_pwhistory/opasswd.c	2023-10-26 12:11:14.437725259 +0200
+@@ -52,9 +52,7 @@
+ #include <stdarg.h>
+ #include <sys/stat.h>
+ 
+-#if defined (HAVE_XCRYPT_H)
+-#include <xcrypt.h>
+-#elif defined (HAVE_CRYPT_H)
++#ifdef HAVE_CRYPT_H
+ #include <crypt.h>
+ #endif
+ 
+diff -up Linux-PAM-1.3.1/modules/pam_unix/bigcrypt.c.legacy-xcrypt Linux-PAM-1.3.1/modules/pam_unix/bigcrypt.c
+--- Linux-PAM-1.3.1/modules/pam_unix/bigcrypt.c.legacy-xcrypt	2017-02-10 11:10:15.000000000 +0100
++++ Linux-PAM-1.3.1/modules/pam_unix/bigcrypt.c	2023-10-26 12:08:46.896437225 +0200
+@@ -29,9 +29,7 @@
+ #include <string.h>
+ #include <stdlib.h>
+ #include <security/_pam_macros.h>
+-#ifdef HAVE_LIBXCRYPT
+-#include <xcrypt.h>
+-#elif defined(HAVE_CRYPT_H)
++#ifdef HAVE_CRYPT_H
+ #include <crypt.h>
+ #endif
+ 
+diff -up Linux-PAM-1.3.1/modules/pam_unix/passverify.c.legacy-xcrypt Linux-PAM-1.3.1/modules/pam_unix/passverify.c
+--- Linux-PAM-1.3.1/modules/pam_unix/passverify.c.legacy-xcrypt	2023-10-26 12:08:46.895437223 +0200
++++ Linux-PAM-1.3.1/modules/pam_unix/passverify.c	2023-10-26 12:16:25.470320408 +0200
+@@ -19,9 +19,7 @@
+ #include <sys/time.h>
+ #include <sys/stat.h>
+ #include <fcntl.h>
+-#ifdef HAVE_LIBXCRYPT
+-#include <xcrypt.h>
+-#elif defined(HAVE_CRYPT_H)
++#ifdef HAVE_CRYPT_H
+ #include <crypt.h>
+ #endif
+ 
+@@ -406,23 +404,19 @@ PAMH_ARG_DECL(char * create_password_has
+ 		return crypted;
+ 	}
+ 
+-#ifdef HAVE_CRYPT_GENSALT_R
+-	if (on(UNIX_BLOWFISH_PASS, ctrl)) {
+-		char entropy[17];
+-		crypt_make_salt(entropy, sizeof(entropy) - 1);
+-		sp = crypt_gensalt_r (algoid, rounds,
+-				      entropy, sizeof(entropy),
+-				      salt, sizeof(salt));
+-	} else {
+-#endif
+-		sp = stpcpy(salt, algoid);
+-		if (on(UNIX_ALGO_ROUNDS, ctrl)) {
+-			sp += snprintf(sp, sizeof(salt) - (16 + 1 + (sp - salt)), "rounds=%u$", rounds);
+-		}
+-		crypt_make_salt(sp, 16);
+-#ifdef HAVE_CRYPT_GENSALT_R
++#if defined(CRYPT_GENSALT_IMPLEMENTS_AUTO_ENTROPY) && CRYPT_GENSALT_IMPLEMENTS_AUTO_ENTROPY
++	/*
++	 * Any version of libcrypt supporting auto entropy is
++	 * guaranteed to have crypt_gensalt_rn().
++	 */
++	sp = crypt_gensalt_rn(algoid, rounds, NULL, 0, salt, sizeof(salt));
++#else
++	sp = stpcpy(salt, algoid);
++	if (on(UNIX_ALGO_ROUNDS, ctrl)) {
++		sp += snprintf(sp, sizeof(salt) - (16 + 1 + (sp - salt)), "rounds=%u$", rounds);
+ 	}
+-#endif
++	crypt_make_salt(sp, 16);
++#endif /* CRYPT_GENSALT_IMPLEMENTS_AUTO_ENTROPY */
+ #ifdef HAVE_CRYPT_R
+ 	sp = NULL;
+ 	cdata = malloc(sizeof(*cdata));
+diff -up Linux-PAM-1.3.1/modules/pam_userdb/pam_userdb.c.legacy-xcrypt Linux-PAM-1.3.1/modules/pam_userdb/pam_userdb.c
+--- Linux-PAM-1.3.1/modules/pam_userdb/pam_userdb.c.legacy-xcrypt	2023-10-26 12:08:46.880437194 +0200
++++ Linux-PAM-1.3.1/modules/pam_userdb/pam_userdb.c	2023-10-26 12:08:46.896437225 +0200
+@@ -17,9 +17,7 @@
+ #include <sys/stat.h>
+ #include <fcntl.h>
+ #include <errno.h>
+-#ifdef HAVE_LIBXCRYPT
+-#include <xcrypt.h>
+-#elif defined(HAVE_CRYPT_H)
++#ifdef HAVE_CRYPT_H
+ #include <crypt.h>
+ #endif
+ 

@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 27%{?dist}
+Release: 33%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -100,6 +100,16 @@ Patch64: pam-1.5.1-pam-faillock-avoid-logging-erroneous.patch
 # https://github.com/linux-pam/linux-pam/commit/55f206447a1e4ee26e307e7a9c069236e823b1a5
 # https://github.com/linux-pam/linux-pam/commit/80bfda5962e5be3daa70e0fc8c75fc97d1c55121
 Patch65: pam-1.3.1-pam-misc-configurable.patch
+# https://github.com/linux-pam/linux-pam/commit/530c9f9e2d746e1d168c6b17863debda7664ac7c
+# https://github.com/linux-pam/linux-pam/commit/f7abb8c1ef3aa31e6c2564a8aaf69683a77c2016
+Patch66: pam-1.3.1-unix-enable-bcrypt.patch
+Patch67: pam-1.3.1-unix-default-rounds.patch
+# https://github.com/linux-pam/linux-pam/commit/d54870f993e97fe75e2cd0470a3701d5af22877c
+Patch68: pam-1.3.1-faillock-create-tallydir.patch
+# https://github.com/linux-pam/linux-pam/commit/23393bef92c1e768eda329813d7af55481c6ca9f
+Patch69: pam-1.3.1-access-handle-hostnames.patch
+# https://github.com/linux-pam/linux-pam/commit/031bb5a5d0d950253b68138b498dc93be69a64cb
+Patch70: pam-1.3.1-namespace-protect-dir.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -213,6 +223,11 @@ cp %{SOURCE18} .
 %patch63 -p1 -b .pam-faillock-clarify-missing-user
 %patch64 -p1 -b .pam-faillock-avoid-logging-erroneous
 %patch65 -p1 -b .pam-misc-configurable
+%patch66 -p1 -b .unix-enable-bcrypt
+%patch67 -p1 -b .unix-default-rounds
+%patch68 -p1 -b .faillock-create-tallydir
+%patch69 -p1 -b .access-handle-hostnames
+%patch70 -p1 -b .namespace-protect-dir
 
 autoreconf -i
 
@@ -466,6 +481,19 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Mon Feb 12 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-33
+- pam_namespace: protect_dir(): use O_DIRECTORY to prevent local DoS
+  situations. CVE-2024-22365. Resolves: RHEL-21242
+
+* Fri Jan 26 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-32
+- pam_access: handle hostnames in access.conf. Resolves: RHEL-3374
+
+* Mon Jan  8 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-31
+- pam_faillock: create tallydir before creating tallyfile. Resolves: RHEL-19810
+
+* Thu Nov  2 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-30
+- pam_unix: enable bcrypt. Resolves: RHEL-5057
+
 * Mon Jun 26 2023 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-27
 - pam_misc: make length of misc_conv() configurable and set to 4096. Resolves: #2209785
 

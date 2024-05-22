@@ -1,0 +1,12 @@
+diff -up Linux-PAM-1.3.1/modules/pam_unix/pam_unix_passwd.c.unix-default-rounds Linux-PAM-1.3.1/modules/pam_unix/pam_unix_passwd.c
+--- Linux-PAM-1.3.1/modules/pam_unix/pam_unix_passwd.c.unix-default-rounds	2023-11-02 09:59:54.533238124 +0100
++++ Linux-PAM-1.3.1/modules/pam_unix/pam_unix_passwd.c	2023-11-02 10:40:58.017404936 +0100
+@@ -607,7 +607,7 @@ pam_sm_chauthtok(pam_handle_t *pamh, int
+ 	unsigned int ctrl, lctrl;
+ 	int retval;
+ 	int remember = -1;
+-	int rounds = -1;
++	int rounds = 0;
+ 	int pass_min_len = 0;
+ 
+ 	/* <DO NOT free() THESE> */
