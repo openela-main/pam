@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 33%{?dist}
+Release: 34%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -110,6 +110,9 @@ Patch68: pam-1.3.1-faillock-create-tallydir.patch
 Patch69: pam-1.3.1-access-handle-hostnames.patch
 # https://github.com/linux-pam/linux-pam/commit/031bb5a5d0d950253b68138b498dc93be69a64cb
 Patch70: pam-1.3.1-namespace-protect-dir.patch
+# https://github.com/linux-pam/linux-pam/commit/c85513220c1bd3150e39c6277422d29cfa44acc7
+# https://github.com/linux-pam/linux-pam/commit/1648734a69c31e9ce834da70144ac9a453296807
+Patch71: pam-1.3.1-audit-messages-formatting.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -228,6 +231,7 @@ cp %{SOURCE18} .
 %patch68 -p1 -b .faillock-create-tallydir
 %patch69 -p1 -b .access-handle-hostnames
 %patch70 -p1 -b .namespace-protect-dir
+%patch71 -p1 -b .audit-messages-formatting
 
 autoreconf -i
 
@@ -481,6 +485,9 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Thu Apr  4 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-34
+- fix formatting of audit messages. Resolves: RHEL-28620
+
 * Mon Feb 12 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-33
 - pam_namespace: protect_dir(): use O_DIRECTORY to prevent local DoS
   situations. CVE-2024-22365. Resolves: RHEL-21242

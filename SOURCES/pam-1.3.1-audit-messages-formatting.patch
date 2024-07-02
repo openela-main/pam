@@ -1,0 +1,33 @@
+diff -up Linux-PAM-1.3.1/modules/pam_faillock/pam_faillock.c.audit-messages-formatting Linux-PAM-1.3.1/modules/pam_faillock/pam_faillock.c
+--- Linux-PAM-1.3.1/modules/pam_faillock/pam_faillock.c.audit-messages-formatting	2024-03-11 16:21:51.928946604 +0100
++++ Linux-PAM-1.3.1/modules/pam_faillock/pam_faillock.c	2024-03-11 16:21:51.934946609 +0100
+@@ -334,7 +334,7 @@ check_tally(pam_handle_t *pamh, struct o
+ 
+ 				(void)pam_get_item(pamh, PAM_TTY, &tty);
+ 				(void)pam_get_item(pamh, PAM_RHOST, &rhost);
+-				snprintf(buf, sizeof(buf), "pam_faillock uid=%u ", opts->uid);
++				snprintf(buf, sizeof(buf), "op=pam_faillock suid=%u ", opts->uid);
+ 				audit_log_user_message(audit_fd, AUDIT_RESP_ACCT_UNLOCK_TIMED, buf,
+ 					rhost, NULL, tty, 1);
+ 			}
+@@ -450,7 +450,7 @@ write_tally(pam_handle_t *pamh, struct o
+ 			errno == EAFNOSUPPORT))
+ 			return PAM_SYSTEM_ERR;
+ 
+-		snprintf(buf, sizeof(buf), "pam_faillock uid=%u ", opts->uid);
++		snprintf(buf, sizeof(buf), "op=pam_faillock suid=%u ", opts->uid);
+ 		audit_log_user_message(audit_fd, AUDIT_ANOM_LOGIN_FAILURES, buf,
+ 			NULL, NULL, NULL, 1);
+ 
+diff -up Linux-PAM-1.3.1/modules/pam_selinux/pam_selinux.c.audit-messages-formatting Linux-PAM-1.3.1/modules/pam_selinux/pam_selinux.c
+--- Linux-PAM-1.3.1/modules/pam_selinux/pam_selinux.c.audit-messages-formatting	2024-03-11 16:21:51.934946609 +0100
++++ Linux-PAM-1.3.1/modules/pam_selinux/pam_selinux.c	2024-03-11 16:23:24.521025061 +0100
+@@ -106,7 +106,7 @@ int send_audit_message(pam_handle_t *pam
+ 		pam_syslog(pamh, LOG_ERR, "Error translating selected context.");
+ 		selected_raw = NULL;
+ 	}
+-	if (asprintf(&msg, "pam: default-context=%s selected-context=%s",
++	if (asprintf(&msg, "op=pam_selinux default-context=%s selected-context=%s",
+ 		     default_raw ? default_raw : (default_context ? default_context : "?"),
+ 		     selected_raw ? selected_raw : (selected_context ? selected_context : "?")) < 0) {
+ 		pam_syslog(pamh, LOG_ERR, "Error allocating memory.");
