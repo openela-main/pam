@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 19%{?dist}
+Release: 20%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -65,6 +65,8 @@ Patch18: pam-1-5-1-libpam-getlogin.patch
 Patch19: pam-1.5.1-access-handle-hostnames.patch
 # https://github.com/linux-pam/linux-pam/commit/031bb5a5d0d950253b68138b498dc93be69a64cb
 Patch20: pam-1.5.1-namespace-protect-dir.patch
+# https://github.com/linux-pam/linux-pam/commit/ec1fb9ddc6c252d8c61379e9385ca19c036fcb96
+Patch21: pam-1.5.1-libpam-support-long-lines.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -167,6 +169,7 @@ cp %{SOURCE18} .
 %patch18 -p1 -b .libpam-getlogin
 %patch19 -p1 -b .access-handle-hostnames
 %patch20 -p1 -b .namespace-protect-dir
+%patch21 -p1 -b .libpam-support-long-lines
 
 autoreconf -i
 
@@ -422,11 +425,14 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
-* Mon Feb 12 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-19
+* Tue Jun 18 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-20
+- libpam: support long lines in service files. Resolves: RHEL-40705
+
+* Mon Feb 12 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-19
 - pam_namespace: protect_dir(): use O_DIRECTORY to prevent local DoS
   situations. CVE-2024-22365. Resolves: RHEL-21244
 
-* Fri Jan 26 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-18
+* Fri Jan 26 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-18
 - libpam: use getlogin() from libc and not utmp. Resolves: RHEL-16727
 - pam_access: handle hostnames in access.conf. Resolves: RHEL-22300
 
