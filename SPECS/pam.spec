@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 20%{?dist}
+Release: 22%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -67,6 +67,11 @@ Patch19: pam-1.5.1-access-handle-hostnames.patch
 Patch20: pam-1.5.1-namespace-protect-dir.patch
 # https://github.com/linux-pam/linux-pam/commit/ec1fb9ddc6c252d8c61379e9385ca19c036fcb96
 Patch21: pam-1.5.1-libpam-support-long-lines.patch
+# https://github.com/linux-pam/linux-pam/commit/b3020da7da384d769f27a8713257fbe1001878be
+# https://github.com/linux-pam/linux-pam/commit/8d0c575336ad301cd14e16ad2fdec6fe621764b8
+Patch22: pam-1.5.1-pam-unix-shadow-password.patch
+# https://github.com/linux-pam/linux-pam/commit/940747f88c16e029b69a74e80a2e94f65cb3e628
+Patch23: pam-1.5.1-pam-access-resolve-ip.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -170,6 +175,8 @@ cp %{SOURCE18} .
 %patch19 -p1 -b .access-handle-hostnames
 %patch20 -p1 -b .namespace-protect-dir
 %patch21 -p1 -b .libpam-support-long-lines
+%patch22 -p1 -b .pam-unix-shadow-password
+%patch23 -p1 -b .pam-access-resolve-ip
 
 autoreconf -i
 
@@ -425,6 +432,14 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
+* Thu Nov 21 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-22
+- pam_access: rework resolving of tokens as hostname.
+  Resolves: CVE-2024-10963 and RHEL-66245
+
+* Wed Nov 6 2024 Diaa Sami <disami@redhat.com> - 1.5.1-21
+- pam_unix: always run the helper to obtain shadow password file entries.
+  CVE-2024-10041. Resolves: RHEL-62880
+
 * Tue Jun 18 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-20
 - libpam: support long lines in service files. Resolves: RHEL-40705
 
