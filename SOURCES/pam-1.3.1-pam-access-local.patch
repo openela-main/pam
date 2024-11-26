@@ -1,0 +1,215 @@
+From 08992030c56c940c0707ccbc442b1c325aa01e6d Mon Sep 17 00:00:00 2001
+From: Tomas Mraz <tmraz@fedoraproject.org>
+Date: Tue, 6 Apr 2021 12:27:38 +0200
+Subject: [PATCH] pam_access: clean up the remote host matching code
+
+* modules/pam_access/pam_access.c (from_match): Split out remote_match()
+  function and avoid calling it when matching against LOCAL keyword.
+  There is also no point in doing domain match against TTY or SERVICE.
+---
+ modules/pam_access/pam_access.c | 44 +++++++++++++++++++++------------
+ 1 file changed, 28 insertions(+), 16 deletions(-)
+
+diff --git a/modules/pam_access/pam_access.c b/modules/pam_access/pam_access.c
+index 98848c54..277192b9 100644
+--- a/modules/pam_access/pam_access.c
++++ b/modules/pam_access/pam_access.c
+@@ -160,6 +160,7 @@ static int list_match (pam_handle_t *, char *, char *, struct login_info *,
+ static int user_match (pam_handle_t *, char *, struct login_info *);
+ static int group_match (pam_handle_t *, const char *, const char *, int);
+ static int from_match (pam_handle_t *, char *, struct login_info *);
++static int remote_match (pam_handle_t *, char *, struct login_info *);
+ static int string_match (pam_handle_t *, const char *, const char *, int);
+ static int network_netmask_match (pam_handle_t *, const char *, const char *, struct login_info *);
+ 
+@@ -589,11 +590,9 @@ group_match (pam_handle_t *pamh, const char *tok, const char* usr,
+ /* from_match - match a host or tty against a list of tokens */
+ 
+ static int
+-from_match (pam_handle_t *pamh UNUSED, char *tok, struct login_info *item)
++from_match (pam_handle_t *pamh, char *tok, struct login_info *item)
+ {
+     const char *string = item->from;
+-    int        tok_len;
+-    int        str_len;
+     int        rv;
+ 
+     if (item->debug)
+@@ -616,14 +615,29 @@ from_match (pam_handle_t *pamh UNUSED, char *tok, struct login_info *item)
+     } else if ((rv = string_match(pamh, tok, string, item->debug)) != NO) {
+         /* ALL or exact match */
+ 	return rv;
+-    } else if (tok[0] == '.') {			/* domain: match last fields */
+-	if ((str_len = strlen(string)) > (tok_len = strlen(tok))
+-	    && strcasecmp(tok, string + str_len - tok_len) == 0)
+-	    return (YES);
+-    } else if (item->from_remote_host == 0) {	/* local: no PAM_RHOSTS */
+-	if (strcasecmp(tok, "LOCAL") == 0)
+-	    return (YES);
+-    } else if (tok[(tok_len = strlen(tok)) - 1] == '.') {
++    } else if (strcasecmp(tok, "LOCAL") == 0) {
++	    /* LOCAL matches only local accesses */
++	    if (!item->from_remote_host)
++	        return YES;
++	    return NO;
++    } else if (item->from_remote_host) {
++        return remote_match(pamh, tok, item);
++    }
++    return NO;
++}
++
++static int
++remote_match (pam_handle_t *pamh, char *tok, struct login_info *item)
++{
++    const char *string = item->from;
++    size_t tok_len = strlen(tok);
++    size_t str_len;
++
++    if (tok[0] == '.') {			/* domain: match last fields */
++      if ((str_len = strlen(string)) > tok_len
++	  && strcasecmp(tok, string + str_len - tok_len) == 0)
++	return YES;
++    } else if (tok[tok_len - 1] == '.') {
+       struct addrinfo hint;
+ 
+       memset (&hint, '\0', sizeof (hint));
+@@ -661,13 +675,11 @@ from_match (pam_handle_t *pamh UNUSED, char *tok, struct login_info *item)
+ 	      runp = runp->ai_next;
+ 	    }
+ 	}
+-    } else {
+-      /* Assume network/netmask with a IP of a host.  */
+-      if (network_netmask_match(pamh, tok, string, item))
+-	return YES;
++      return NO;
+     }
+ 
+-    return NO;
++    /* Assume network/netmask with an IP of a host.  */
++    return network_netmask_match(pamh, tok, string, item);
+ }
+ 
+ /* string_match - match a string against one token */
+-- 
+2.47.0
+
+
+From ecaaf4456e5aeacae1acdb1775bb5aadd3b19e13 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 16 Oct 2024 12:41:09 +0200
+Subject: [PATCH 1/2] pam_access: always match local address
+
+* modules/pam_access/pam_access.c: match the local address regardless of
+  the IP version in use.
+
+In some circumstances the `localhost` may be translated to IPv4 or IPv6,
+but the configuration file only indicated the address for one of the two
+versions. Since the originating value is set in `PAM_RHOST` and PAM has
+no control over it, let's match the local addresses regardless of the IP
+version in use.
+
+Resolves: https://issues.redhat.com/browse/RHEL-23018
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_access/pam_access.c | 30 ++++++++++++++++++++++++++++--
+ 1 file changed, 28 insertions(+), 2 deletions(-)
+
+diff --git a/modules/pam_access/pam_access.c b/modules/pam_access/pam_access.c
+index bfbc6d57..48e7c7e9 100644
+--- a/modules/pam_access/pam_access.c
++++ b/modules/pam_access/pam_access.c
+@@ -306,6 +306,23 @@ isipaddr (const char *string, int *addr_type,
+   return is_ip;
+ }
+ 
++/* is_local_addr - checks if the IP address is local */
++static int
++is_local_addr (const char *string, int addr_type)
++{
++  if (addr_type == AF_INET) {
++    if (strcmp(string, "127.0.0.1") == 0) {
++      return YES;
++    }
++  } else if (addr_type == AF_INET6) {
++    if (strcmp(string, "::1") == 0) {
++      return YES;
++    }
++  }
++
++  return NO;
++}
++
+ 
+ /* are_addresses_equal - translate IP address strings to real IP
+  * addresses and compare them to find out if they are equal.
+@@ -327,9 +344,18 @@ are_addresses_equal (const char *ipaddr0, const char *ipaddr1,
+   if (isipaddr (ipaddr1, &addr_type1, &addr1) == NO)
+     return NO;
+ 
+-  if (addr_type0 != addr_type1)
+-    /* different address types */
++  if (addr_type0 != addr_type1) {
++    /* different address types, but there is still a possibility that they are
++     * both local addresses
++     */
++    int local1 = is_local_addr(ipaddr0, addr_type0);
++    int local2 = is_local_addr(ipaddr1, addr_type1);
++
++    if (local1 == YES && local2 == YES)
++      return YES;
++
+     return NO;
++  }
+ 
+   if (netmask != NULL) {
+     /* Got a netmask, so normalize addresses? */
+-- 
+2.47.0
+
+
+From 641dfd1084508c63f3590e93a35b80ffc50774e5 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Fri, 18 Oct 2024 10:27:07 +0200
+Subject: [PATCH 2/2] pam_access: clarify `LOCAL` keyword behaviour
+
+* modules/pam_access/access.conf.5.xml: `LOCAL` keyword behaviour
+  explanation was focused on the development internals. Let's clarify it
+  by rephrasing it to something a sysadmin can understand.
+
+Resolves: https://issues.redhat.com/browse/RHEL-39943
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_access/access.conf.5.xml | 17 ++++++-----------
+ 1 file changed, 6 insertions(+), 11 deletions(-)
+
+diff --git a/modules/pam_access/access.conf.5.xml b/modules/pam_access/access.conf.5.xml
+index 35a1a8fe..0b93db00 100644
+--- a/modules/pam_access/access.conf.5.xml
++++ b/modules/pam_access/access.conf.5.xml
+@@ -79,17 +79,12 @@
+       with network mask (where network mask can be a decimal number or an
+       internet address also), <emphasis>ALL</emphasis> (which always matches)
+       or <emphasis>LOCAL</emphasis>. The <emphasis>LOCAL</emphasis>
+-      keyword matches if and only if
+-      <citerefentry><refentrytitle>pam_get_item</refentrytitle><manvolnum>3</manvolnum></citerefentry>,
+-      when called with an <parameter>item_type</parameter> of
+-      <emphasis>PAM_RHOST</emphasis>, returns <code>NULL</code> or an
+-      empty string (and therefore the
+-      <replaceable>origins</replaceable> field is compared against the
+-      return value of
+-      <citerefentry><refentrytitle>pam_get_item</refentrytitle><manvolnum>3</manvolnum></citerefentry>
+-      called with an <parameter>item_type</parameter> of
+-      <emphasis>PAM_TTY</emphasis> or, absent that,
+-      <emphasis>PAM_SERVICE</emphasis>).
++      keyword matches when the user connects without a network
++      connection (e.g., <emphasis>su</emphasis>,
++      <emphasis>login</emphasis>). A connection through the loopback
++      device (e.g., <command>ssh user@localhost</command>) is
++      considered a network connection, and thus, the
++      <emphasis>LOCAL</emphasis> keyword does not match.
+     </para>
+ 
+     <para>
+-- 
+2.47.0
+

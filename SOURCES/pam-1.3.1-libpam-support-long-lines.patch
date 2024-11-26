@@ -1,0 +1,595 @@
+diff -up Linux-PAM-1.3.1/libpam/pam_handlers.c.libpam-support-long-lines Linux-PAM-1.3.1/libpam/pam_handlers.c
+--- Linux-PAM-1.3.1/libpam/pam_handlers.c.libpam-support-long-lines	2024-11-04 13:17:27.395991844 +0100
++++ Linux-PAM-1.3.1/libpam/pam_handlers.c	2024-11-04 14:45:22.583441849 +0100
+@@ -16,21 +16,30 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ 
+-#define BUF_SIZE                  1024
+ #define MODULE_CHUNK              4
+ #define UNKNOWN_MODULE       "<*unknown module*>"
+ #ifndef _PAM_ISA
+ #define _PAM_ISA "."
+ #endif
+ 
+-static int _pam_assemble_line(FILE *f, char *buf, int buf_len);
++struct line_buffer {
++	char *assembled;
++	char *chunk;
++	size_t chunk_size;
++	size_t len;
++	size_t size;
++};
++
++static void _pam_buffer_init(struct line_buffer *buffer);
++
++static int _pam_assemble_line(FILE *f, struct line_buffer *buf);
+ 
+ static void _pam_free_handlers_aux(struct handler **hp);
+ 
+ static int _pam_add_handler(pam_handle_t *pamh
+ 		     , int must_fail, int other, int stack_level, int type
+ 		     , int *actions, const char *mod_path
+-		     , int argc, char **argv, int argvlen);
++		     , int argc, char **argv, size_t argvlen);
+ 
+ /* Values for module type */
+ 
+@@ -58,12 +67,15 @@ static int _pam_parse_conf_file(pam_hand
+ #endif /* PAM_READ_BOTH_CONFS */
+     )
+ {
+-    char buf[BUF_SIZE];
++    struct line_buffer buffer;
+     int x;                    /* read a line from the FILE *f ? */
++
++    _pam_buffer_init(&buffer);
+     /*
+      * read a line from the configuration (FILE *) f
+      */
+-    while ((x = _pam_assemble_line(f, buf, BUF_SIZE)) > 0) {
++    while ((x = _pam_assemble_line(f, &buffer)) > 0) {
++	char *buf = buffer.assembled;
+ 	char *tok, *nexttok=NULL;
+ 	const char *this_service;
+ 	const char *mod_path;
+@@ -73,7 +85,7 @@ static int _pam_parse_conf_file(pam_hand
+ 	int handler_type = PAM_HT_MODULE; /* regular handler from a module */
+ 	int argc;
+ 	char **argv;
+-	int argvlen;
++	size_t argvlen;
+ 
+ 	D(("_pam_init_handler: LINE: %s", buf));
+ 	if (known_service != NULL) {
+@@ -232,10 +244,11 @@ static int _pam_parse_conf_file(pam_hand
+ 	    if (nexttok != NULL) {
+ 		D(("list: %s",nexttok));
+ 	        argvlen = _pam_mkargv(nexttok, &argv, &argc);
+-		D(("argvlen = %d",argvlen));
++		D(("argvlen = %zu",argvlen));
+ 	    } else {               /* there are no arguments so fix by hand */
+ 		D(("_pam_init_handlers: empty argument list"));
+-		argvlen = argc = 0;
++		argvlen = 0;
++		argc = 0;
+ 		argv = NULL;
+ 	    }
+ 
+@@ -548,88 +561,243 @@ int _pam_init_handlers(pam_handle_t *pam
+     return PAM_SUCCESS;
+ }
+ 
++static int _pam_buffer_add(struct line_buffer *buffer, char *start, char *end)
++{
++    size_t len = end - start;
++
++    D(("assembled: [%zu/%zu] '%s', adding [%zu] '%s'",
++	buffer->len, buffer->size,
++	buffer->assembled == NULL ? "" : buffer->assembled, len, start));
++
++    if (start == end)
++	return 0;
++
++    if (buffer->assembled == NULL && buffer->chunk == start) {
++	/* no extra allocation needed, just move chunk to assembled */
++	buffer->assembled = buffer->chunk;
++	buffer->len = len;
++	buffer->size = buffer->chunk_size;
++
++	buffer->chunk = NULL;
++	buffer->chunk_size = 0;
++
++	D(("exiting with quick exchange"));
++	return 0;
++    }
++
++    if (buffer->len + len + 1 > buffer->size) {
++	size_t size;
++	char *p;
++
++	size = buffer->len + len + 1;
++	if ((p = realloc(buffer->assembled, size)) == NULL)
++		return -1;
++
++	buffer->assembled = p;
++	buffer->size = size;
++    }
++
++    memcpy(buffer->assembled + buffer->len, start, len);
++    buffer->len += len;
++    buffer->assembled[buffer->len] = '\0';
++
++    D(("exiting"));
++    return 0;
++}
++
++static inline int _pam_buffer_add_eol(struct line_buffer *buffer,
++				      char *start, char *end)
++{
++    if (buffer->assembled != NULL || (*start != '\0' && *start != '\n'))
++	return _pam_buffer_add(buffer, start, end);
++    return 0;
++}
++
++static void _pam_buffer_clear(struct line_buffer *buffer)
++{
++    _pam_drop(buffer->assembled);
++    _pam_drop(buffer->chunk);
++    buffer->chunk_size = 0;
++    buffer->len = 0;
++    buffer->size = 0;
++}
++
++static void _pam_buffer_init(struct line_buffer *buffer)
++{
++    buffer->assembled = NULL;
++    buffer->chunk = NULL;
++    _pam_buffer_clear(buffer);
++}
++
++static void _pam_buffer_purge(struct line_buffer *buffer)
++{
++    _pam_drop(buffer->chunk);
++    buffer->chunk_size = 0;
++}
++
++static void _pam_buffer_shift(struct line_buffer *buffer)
++{
++    if (buffer->assembled == NULL)
++	return;
++
++    _pam_buffer_purge(buffer);
++    buffer->chunk = buffer->assembled;
++    buffer->chunk_size = buffer->size;
++
++    buffer->assembled = NULL;
++    buffer->size = 0;
++    buffer->len = 0;
++}
++
++static inline int _pam_buffer_valid(struct line_buffer *buffer)
++{
++    return buffer->assembled != NULL && *buffer->assembled != '\0';
++}
++
+ /*
+- * This is where we read a line of the PAM config file. The line may be
+- * preceeded by lines of comments and also extended with "\\\n"
++ * Trim string to relevant parts of a configuration line.
++ *
++ * Preceding whitespaces are skipped and comment (#) marks the end of
++ * configuration line.
++ *
++ * Returns start of configuration line.
+  */
++static inline char *_pam_str_trim(char *str)
++{
++    /* skip leading spaces */
++    str += strspn(str, " \t");
++    /*
++     * we are only interested in characters before the first '#'
++     * character
++     */
++    str[strcspn(str, "#")] = '\0';
+ 
+-static int _pam_assemble_line(FILE *f, char *buffer, int buf_len)
++    return str;
++}
++
++/*
++ * Remove escaped newline from end of string.
++ *
++ * Configuration lines may span across multiple lines in a file
++ * by ending a line with a backslash (\).
++ *
++ * If an escaped newline is encountered, the backslash will be
++ * replaced with a blank ' ' and the newline itself removed.
++ * Then the variable "end" will point to the new end of line.
++ *
++ * Returns 0 if escaped newline was found and replaced, 1 otherwise.
++ */
++static inline int _pam_str_unescnl(char *start, char **end)
+ {
+-    char *p = buffer;
+-    char *endp = buffer + buf_len;
+-    char *s, *os;
+-    int used = 0;
++    int ret = 1;
++    char *p = *end;
+ 
+-    /* loop broken with a 'break' when a non-'\\n' ended line is read */
++    /*
++     * Check for backslash by scanning back from the end of
++     * the entered line, the '\n' should be included since
++     * normally a line is terminated with this character.
++     */
++    while (p > start && ((*--p == ' ') || (*p == '\t') || (*p == '\n')))
++	;
++    if (*p == '\\') {
++	*p++ = ' ';         /* replace backslash with ' ' */
++	*p = '\0';          /* truncate the line here */
++	*end = p;
++	ret = 0;
++    }
+ 
+-    D(("called."));
+-    for (;;) {
+-	if (p >= endp) {
+-	    /* Overflow */
+-	    D(("_pam_assemble_line: overflow"));
+-	    return -1;
+-	}
+-	if (fgets(p, endp - p, f) == NULL) {
+-	    if (used) {
+-		/* Incomplete read */
+-		return -1;
+-	    } else {
+-		/* EOF */
+-		return 0;
+-	    }
+-	}
++    return ret;
++}
+ 
+-	/* skip leading spaces --- line may be blank */
++/*
++ * Prepare line from file for configuration line parsing.
++ *
++ * A configuration line may span across multiple lines in a file.
++ * Remove comments and skip preceding whitespaces.
++ *
++ * Returns 0 if line spans across multiple lines, 1 if
++ * end of line is encountered.
++ */
++static inline int _pam_str_prepare(char *line, ssize_t len,
++				   char **start, char **end)
++{
++    int ret;
+ 
+-	s = p + strspn(p, " \n\t");
+-	if (*s && (*s != '#')) {
+-	    os = s;
++    *start = line;
++    *end = line + len;
+ 
+-	    /*
+-	     * we are only interested in characters before the first '#'
+-	     * character
+-	     */
++    ret = _pam_str_unescnl(*start, end) || strchr(*start, '#') != NULL;
+ 
+-	    while (*s && *s != '#')
+-		 ++s;
+-	    if (*s == '#') {
+-		 *s = '\0';
+-		 used += strlen(os);
+-		 break;                /* the line has been read */
+-	    }
++    *start = _pam_str_trim(*start);
++
++    return ret;
++}
++
++/*
++ * This is where we read a line of the PAM config file. The line may be
++ * preceded by lines of comments and also extended with "\\\n"
++ *
++ * Returns 0 on EOF, 1 on successful line parsing, or -1 on error.
++ */
++
++static int _pam_assemble_line(FILE *f, struct line_buffer *buffer)
++{
++    int ret = 0;
++
++    /* loop broken with a 'break' when a non-'\\n' ended line is read */
+ 
+-	    s = os;
++    D(("called."));
+ 
+-	    /*
+-	     * Check for backslash by scanning back from the end of
+-	     * the entered line, the '\n' has been included since
+-	     * normally a line is terminated with this
+-	     * character. fgets() should only return one though!
+-	     */
++    _pam_buffer_shift(buffer);
+ 
+-	    s += strlen(s);
+-	    while (s > os && ((*--s == ' ') || (*s == '\t')
+-			      || (*s == '\n')));
++    for (;;) {
++	char *start, *end;
++	ssize_t n;
++	int eol;
+ 
+-	    /* check if it ends with a backslash */
+-	    if (*s == '\\') {
+-		*s++ = ' ';             /* replace backslash with ' ' */
+-		*s = '\0';              /* truncate the line here */
+-		used += strlen(os);
+-		p = s;                  /* there is more ... */
++	if ((n = getline(&buffer->chunk, &buffer->chunk_size, f)) == -1) {
++	    if (ret) {
++		/* Incomplete read */
++		ret = -1;
+ 	    } else {
+-		/* End of the line! */
+-		used += strlen(os);
+-		break;                  /* this is the complete line */
++		/* EOF */
++		ret = 0;
+ 	    }
++	    break;
++	}
++
++	eol = _pam_str_prepare(buffer->chunk, n, &start, &end);
+ 
++	if (eol) {
++	    if (_pam_buffer_add_eol(buffer, start, end)) {
++		ret = -1;
++		break;
++	    }
++	    if (_pam_buffer_valid(buffer)) {
++		/* Successfully parsed a line */
++		ret = 1;
++		break;
++	    }
++	    /* Start parsing next line */
++	    _pam_buffer_shift(buffer);
++	    ret = 0;
+ 	} else {
+-	    /* Nothing in this line */
+-	    /* Don't move p         */
++	    /* Configuration line spans across multiple lines in file */
++	    if (_pam_buffer_add(buffer, start, end)) {
++		ret = -1;
++		break;
++	    }
++	    /* Keep parsing line */
++	    ret = 1;
+ 	}
+     }
+ 
+-    return used;
++    if (ret == 1)
++	_pam_buffer_purge(buffer);
++    else
++	_pam_buffer_clear(buffer);
++
++    return ret;
+ }
+ 
+ static char *
+@@ -761,7 +929,7 @@ _pam_load_module(pam_handle_t *pamh, con
+ int _pam_add_handler(pam_handle_t *pamh
+ 		     , int handler_type, int other, int stack_level, int type
+ 		     , int *actions, const char *mod_path
+-		     , int argc, char **argv, int argvlen)
++		     , int argc, char **argv, size_t argvlen)
+ {
+     struct loaded_module *mod = NULL;
+     struct handler **handler_p;
+diff -up Linux-PAM-1.3.1/libpam/pam_misc.c.libpam-support-long-lines Linux-PAM-1.3.1/libpam/pam_misc.c
+--- Linux-PAM-1.3.1/libpam/pam_misc.c.libpam-support-long-lines	2017-02-10 11:10:15.000000000 +0100
++++ Linux-PAM-1.3.1/libpam/pam_misc.c	2024-11-04 14:47:31.147672755 +0100
+@@ -39,6 +39,8 @@
+ 
+ #include <stdarg.h>
+ #include <stdlib.h>
++#include <stdint.h>
++#include <limits.h>
+ #include <stdio.h>
+ #include <string.h>
+ #include <syslog.h>
+@@ -163,60 +165,55 @@ char *_pam_memdup(const char *x, int len
+ /* Generate argv, argc from s */
+ /* caller must free(argv)     */
+ 
+-int _pam_mkargv(char *s, char ***argv, int *argc)
++size_t _pam_mkargv(const char *s, char ***argv, int *argc)
+ {
+-    int l;
+-    int argvlen = 0;
+-    char *sbuf, *sbuf_start;
++    size_t l;
++    size_t argvlen = 0;
+     char **our_argv = NULL;
+-    char **argvbuf;
+-    char *argvbufp;
+-#ifdef PAM_DEBUG
+-    int count=0;
+-#endif
+ 
+-    D(("_pam_mkargv called: %s",s));
++    D(("called: %s",s));
+ 
+     *argc = 0;
+ 
+     l = strlen(s);
+-    if (l) {
+-	if ((sbuf = sbuf_start = _pam_strdup(s)) == NULL) {
+-	    pam_syslog(NULL, LOG_CRIT,
+-		       "pam_mkargv: null returned by _pam_strdup");
+-	    D(("arg NULL"));
++    if (l && l < SIZE_MAX / (sizeof(char) + sizeof(char *))) {
++	char **argvbuf;
++	/* Overkill on the malloc, but not large */
++	argvlen = (l + 1) * (sizeof(char) + sizeof(char *));
++	if ((our_argv = argvbuf = malloc(argvlen)) == NULL) {
++	    pam_syslog(NULL, LOG_CRIT, "pam_mkargv: null returned by malloc");
++	    argvlen = 0;
+ 	} else {
+-	    /* Overkill on the malloc, but not large */
+-	    argvlen = (l + 1) * ((sizeof(char)) + sizeof(char *));
+-	    if ((our_argv = argvbuf = malloc(argvlen)) == NULL) {
+-		pam_syslog(NULL, LOG_CRIT,
+-			   "pam_mkargv: null returned by malloc");
+-	    } else {
+-		char *tmp=NULL;
+-
+-		argvbufp = (char *) argvbuf + (l * sizeof(char *));
+-		D(("[%s]",sbuf));
+-		while ((sbuf = _pam_StrTok(sbuf, " \n\t", &tmp))) {
+-		    D(("arg #%d",++count));
+-		    D(("->[%s]",sbuf));
+-		    strcpy(argvbufp, sbuf);
+-		    D(("copied token"));
+-		    *argvbuf = argvbufp;
+-		    argvbufp += strlen(argvbufp) + 1;
+-		    D(("stepped in argvbufp"));
+-		    (*argc)++;
+-		    argvbuf++;
+-		    sbuf = NULL;
+-		    D(("loop again?"));
++	    char *argvbufp;
++	    char *tmp=NULL;
++	    char *tok;
++#ifdef PAM_DEBUG
++	    unsigned count=0;
++#endif
++	    argvbufp = (char *) argvbuf + (l * sizeof(char *));
++	    strcpy(argvbufp, s);
++	    D(("[%s]",argvbufp));
++	    while ((tok = _pam_StrTok(argvbufp, " \n\t", &tmp))) {
++		D(("arg #%u",++count));
++		D(("->[%s]",tok));
++		*argvbuf++ = tok;
++		if (*argc == INT_MAX) {
++		    pam_syslog(NULL, LOG_CRIT,
++			       "pam_mkargv: too many arguments");
++		    argvlen = 0;
++		    _pam_drop(our_argv);
++		    break;
+ 		}
++		(*argc)++;
++		argvbufp = NULL;
++		D(("loop again?"));
+ 	    }
+-	    _pam_drop(sbuf_start);
+ 	}
+     }
+ 
+     *argv = our_argv;
+ 
+-    D(("_pam_mkargv returned"));
++    D(("exiting"));
+ 
+     return(argvlen);
+ }
+diff -up Linux-PAM-1.3.1/libpam/pam_private.h.libpam-support-long-lines Linux-PAM-1.3.1/libpam/pam_private.h
+--- Linux-PAM-1.3.1/libpam/pam_private.h.libpam-support-long-lines	2024-11-04 13:17:27.404991868 +0100
++++ Linux-PAM-1.3.1/libpam/pam_private.h	2024-11-04 14:51:31.654635328 +0100
+@@ -16,6 +16,7 @@
+ 
+ #include "config.h"
+ 
++#include <stddef.h>
+ #include <syslog.h>
+ 
+ #include <security/pam_appl.h>
+@@ -266,7 +267,7 @@ char *_pam_strdup(const char *s);
+ 
+ char *_pam_memdup(const char *s, int len);
+ 
+-int _pam_mkargv(char *s, char ***argv, int *argc);
++size_t _pam_mkargv(const char *s, char ***argv, int *argc);
+ 
+ void _pam_sanitize(pam_handle_t *pamh);
+ 
+diff -up Linux-PAM-1.3.1/modules/pam_exec/pam_exec.c.libpam-support-long-lines Linux-PAM-1.3.1/modules/pam_exec/pam_exec.c
+--- Linux-PAM-1.3.1/modules/pam_exec/pam_exec.c.libpam-support-long-lines	2017-02-10 11:10:15.000000000 +0100
++++ Linux-PAM-1.3.1/modules/pam_exec/pam_exec.c	2024-11-04 13:17:27.434991946 +0100
+@@ -408,7 +408,7 @@ call_exec (const char *pam_type, pam_han
+ 	  _exit (err);
+ 	}
+ 
+-      arggv = calloc (argc + 4, sizeof (char *));
++      arggv = calloc ((size_t) argc + 1, sizeof (char *));
+       if (arggv == NULL)
+ 	_exit (ENOMEM);
+ 
+diff -up Linux-PAM-1.3.1/modules/pam_filter/pam_filter.c.libpam-support-long-lines Linux-PAM-1.3.1/modules/pam_filter/pam_filter.c
+--- Linux-PAM-1.3.1/modules/pam_filter/pam_filter.c.libpam-support-long-lines	2017-02-10 11:10:15.000000000 +0100
++++ Linux-PAM-1.3.1/modules/pam_filter/pam_filter.c	2024-11-04 13:17:27.434991946 +0100
+@@ -101,7 +101,8 @@ static int process_args(pam_handle_t *pa
+ 	char **levp;
+ 	const char *user = NULL;
+ 	const void *tmp;
+-	int i,size, retval;
++	int i, retval;
++	size_t size;
+ 
+ 	*filtername = *++argv;
+ 	if (ctrl & FILTER_DEBUG) {
+diff -up Linux-PAM-1.3.1/modules/pam_motd/pam_motd.c.libpam-support-long-lines Linux-PAM-1.3.1/modules/pam_motd/pam_motd.c
+--- Linux-PAM-1.3.1/modules/pam_motd/pam_motd.c.libpam-support-long-lines	2024-11-04 13:17:27.423991918 +0100
++++ Linux-PAM-1.3.1/modules/pam_motd/pam_motd.c	2024-11-04 13:17:27.434991946 +0100
+@@ -83,14 +83,14 @@ static void try_to_display_fd(pam_handle
+  * Returns 0 in case of error, 1 in case of success.
+  */
+ static int pam_split_string(const pam_handle_t *pamh, char *arg, char delim,
+-			    char ***out_arg_split, unsigned int *out_num_strs)
++			    char ***out_arg_split, size_t *out_num_strs)
+ {
+     char *arg_extracted = NULL;
+     const char *arg_ptr = arg;
+     char **arg_split = NULL;
+     char delim_str[2];
+-    unsigned int i = 0;
+-    unsigned int num_strs = 0;
++    size_t i = 0;
++    size_t num_strs = 0;
+     int retval = 0;
+ 
+     delim_str[0] = delim;
+@@ -184,13 +184,13 @@ static int filter_dirents(const struct d
+ }
+ 
+ static void try_to_display_directories_with_overrides(pam_handle_t *pamh,
+-	char **motd_dir_path_split, unsigned int num_motd_dirs, int report_missing)
++	char **motd_dir_path_split, size_t num_motd_dirs, int report_missing)
+ {
+     struct dirent ***dirscans = NULL;
+     unsigned int *dirscans_sizes = NULL;
+     unsigned int dirscans_size_total = 0;
+     char **dirnames_all = NULL;
+-    unsigned int i;
++    size_t i;
+     int i_dirnames = 0;
+ 
+     if (pamh == NULL || motd_dir_path_split == NULL) {
+@@ -302,11 +302,11 @@ int pam_sm_open_session(pam_handle_t *pa
+     int retval = PAM_IGNORE;
+     const char *motd_path = NULL;
+     char *motd_path_copy = NULL;
+-    unsigned int num_motd_paths = 0;
++    size_t num_motd_paths = 0;
+     char **motd_path_split = NULL;
+     const char *motd_dir_path = NULL;
+     char *motd_dir_path_copy = NULL;
+-    unsigned int num_motd_dir_paths = 0;
++    size_t num_motd_dir_paths = 0;
+     char **motd_dir_path_split = NULL;
+     int report_missing;
+ 

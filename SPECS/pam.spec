@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 34%{?dist}
+Release: 36%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -113,6 +113,16 @@ Patch70: pam-1.3.1-namespace-protect-dir.patch
 # https://github.com/linux-pam/linux-pam/commit/c85513220c1bd3150e39c6277422d29cfa44acc7
 # https://github.com/linux-pam/linux-pam/commit/1648734a69c31e9ce834da70144ac9a453296807
 Patch71: pam-1.3.1-audit-messages-formatting.patch
+# https://github.com/linux-pam/linux-pam/commit/b3020da7da384d769f27a8713257fbe1001878be
+# https://github.com/linux-pam/linux-pam/commit/8d0c575336ad301cd14e16ad2fdec6fe621764b8
+Patch72: pam-1.3.1-pam-unix-shadow-password.patch
+# https://github.com/linux-pam/linux-pam/commit/08992030c56c940c0707ccbc442b1c325aa01e6d
+# https://github.com/linux-pam/linux-pam/commit/641dfd1084508c63f3590e93a35b80ffc50774e5
+Patch73: pam-1.3.1-pam-access-local.patch
+# https://github.com/linux-pam/linux-pam/commit/ec1fb9ddc6c252d8c61379e9385ca19c036fcb96
+Patch74: pam-1.3.1-libpam-support-long-lines.patch
+# https://github.com/linux-pam/linux-pam/commit/940747f88c16e029b69a74e80a2e94f65cb3e628
+Patch75: pam-1.3.1-pam-access-resolve-ip.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -232,6 +242,10 @@ cp %{SOURCE18} .
 %patch69 -p1 -b .access-handle-hostnames
 %patch70 -p1 -b .namespace-protect-dir
 %patch71 -p1 -b .audit-messages-formatting
+%patch72 -p1 -b .pam-unix-shadow-password
+%patch73 -p1 -b .pam-access-local
+%patch74 -p1 -b .libpam-support-long-lines
+%patch75 -p1 -b .pam-access-resolve-ip
 
 autoreconf -i
 
@@ -485,6 +499,17 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Mon Nov 25 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-36
+- pam_access: rework resolving of tokens as hostname.
+  Resolves: CVE-2024-10963 and RHEL-66242
+
+* Mon Nov  4 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-35
+- pam_unix: always run the helper to obtain shadow password file entries.
+  CVE-2024-10041. Resolves: RHEL-62877
+- pam_access: always match local address and clarify LOCAL keyword behaviour.
+  Resolves: RHEL-23018
+- libpam: support long lines in service files. Resolves: RHEL-5051
+
 * Thu Apr  4 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-34
 - fix formatting of audit messages. Resolves: RHEL-28620
 
