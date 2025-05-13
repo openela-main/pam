@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 22%{?dist}
+Release: 23%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -70,8 +70,11 @@ Patch21: pam-1.5.1-libpam-support-long-lines.patch
 # https://github.com/linux-pam/linux-pam/commit/b3020da7da384d769f27a8713257fbe1001878be
 # https://github.com/linux-pam/linux-pam/commit/8d0c575336ad301cd14e16ad2fdec6fe621764b8
 Patch22: pam-1.5.1-pam-unix-shadow-password.patch
+# https://github.com/linux-pam/linux-pam/commit/08992030c56c940c0707ccbc442b1c325aa01e6d
+# https://github.com/linux-pam/linux-pam/commit/641dfd1084508c63f3590e93a35b80ffc50774e5
+Patch23: pam-1.5.1-pam-access-local.patch
 # https://github.com/linux-pam/linux-pam/commit/940747f88c16e029b69a74e80a2e94f65cb3e628
-Patch23: pam-1.5.1-pam-access-resolve-ip.patch
+Patch24: pam-1.5.1-pam-access-resolve-ip.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -176,7 +179,8 @@ cp %{SOURCE18} .
 %patch20 -p1 -b .namespace-protect-dir
 %patch21 -p1 -b .libpam-support-long-lines
 %patch22 -p1 -b .pam-unix-shadow-password
-%patch23 -p1 -b .pam-access-resolve-ip
+%patch23 -p1 -b .pam-access-local
+%patch24 -p1 -b .pam-access-resolve-ip
 
 autoreconf -i
 
@@ -432,13 +436,15 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
-* Thu Nov 21 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-22
+* Thu Nov 21 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-23
 - pam_access: rework resolving of tokens as hostname.
-  Resolves: CVE-2024-10963 and RHEL-66245
+  Resolves: CVE-2024-10963 and RHEL-66244
 
-* Wed Nov 6 2024 Diaa Sami <disami@redhat.com> - 1.5.1-21
+* Mon Nov  4 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-22
 - pam_unix: always run the helper to obtain shadow password file entries.
-  CVE-2024-10041. Resolves: RHEL-62880
+  CVE-2024-10041. Resolves: RHEL-62879
+- pam_access: always match local address and clarify LOCAL keyword behaviour.
+  Resolves: RHEL-23631 and RHEL-39943
 
 * Tue Jun 18 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-20
 - libpam: support long lines in service files. Resolves: RHEL-40705

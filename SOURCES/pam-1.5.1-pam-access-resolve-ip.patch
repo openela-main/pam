@@ -1,7 +1,7 @@
 diff -up Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-resolve-ip Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml
---- Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-resolve-ip	2020-11-25 17:57:02.000000000 +0100
-+++ Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml	2024-11-21 10:04:58.553127026 +0100
-@@ -226,6 +226,14 @@
+--- Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-resolve-ip	2024-11-21 09:37:12.440595194 +0100
++++ Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml	2024-11-21 09:39:18.568949578 +0100
+@@ -221,6 +221,14 @@
        item and the line will be most probably ignored. For this reason, it is not
        recommended to put spaces around the ':' characters.
      </para>
@@ -17,8 +17,8 @@ diff -up Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-resolve
  
    <refsect1 id="access.conf-see_also">
 diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml.pam-access-resolve-ip Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml
---- Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml.pam-access-resolve-ip	2020-11-25 17:57:02.000000000 +0100
-+++ Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml	2024-11-21 10:04:58.553127026 +0100
+--- Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml.pam-access-resolve-ip	2024-11-21 09:37:12.440595194 +0100
++++ Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml	2024-11-21 09:40:00.100066246 +0100
 @@ -25,11 +25,14 @@
        <arg choice="opt">
          debug
@@ -106,8 +106,8 @@ diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.8.xml.pam-access-resolve-
      </variablelist>
    </refsect1>
 diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-resolve-ip Linux-PAM-1.5.1/modules/pam_access/pam_access.c
---- Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-resolve-ip	2024-11-21 10:04:58.547127010 +0100
-+++ Linux-PAM-1.5.1/modules/pam_access/pam_access.c	2024-11-21 10:04:58.553127026 +0100
+--- Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-resolve-ip	2024-11-21 09:37:12.439595191 +0100
++++ Linux-PAM-1.5.1/modules/pam_access/pam_access.c	2024-11-21 09:40:13.231103128 +0100
 @@ -92,6 +92,7 @@ struct login_info {
      int debug;				/* Print debugging messages. */
      int only_new_group_syntax;		/* Only allow group entries of the form "(xyz)" */
@@ -125,7 +125,16 @@ diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-resolve-ip L
  	} else {
  	    pam_syslog(pamh, LOG_ERR, "unrecognized option [%s]", argv[i]);
  	}
-@@ -700,6 +703,39 @@ string_match (pam_handle_t *pamh, const
+@@ -663,7 +666,7 @@ remote_match (pam_handle_t *pamh, char *
+       if ((str_len = strlen(string)) > tok_len
+ 	  && strcasecmp(tok, string + str_len - tok_len) == 0)
+ 	return YES;
+-    } else if (tok[tok_len - 1] == '.') {
++    } else if (tok[tok_len - 1] == '.') {       /* internet network numbers/subnet (end with ".") */
+       struct addrinfo hint;
+ 
+       memset (&hint, '\0', sizeof (hint));
+@@ -738,6 +741,39 @@ string_match (pam_handle_t *pamh, const
  }
  
  
@@ -165,7 +174,7 @@ diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-resolve-ip L
  /* network_netmask_match - match a string against one token
   * where string is a hostname or ip (v4,v6) address and tok
   * represents either a hostname, a single ip (v4,v6) address
-@@ -761,10 +797,42 @@ network_netmask_match (pam_handle_t *pam
+@@ -799,10 +835,42 @@ network_netmask_match (pam_handle_t *pam
  	    return NO;
  	  }
        }
