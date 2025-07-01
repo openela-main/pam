@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 36%{?dist}
+Release: 37%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -123,6 +123,10 @@ Patch73: pam-1.3.1-pam-access-local.patch
 Patch74: pam-1.3.1-libpam-support-long-lines.patch
 # https://github.com/linux-pam/linux-pam/commit/940747f88c16e029b69a74e80a2e94f65cb3e628
 Patch75: pam-1.3.1-pam-access-resolve-ip.patch
+# https://github.com/linux-pam/linux-pam/commit/10b80543807e3fc5af5f8bcfd8bb6e219bb3cecc
+Patch76: pam-1.3.1-pam-inline-pam-asprintf.patch
+# Available upstream
+Patch77: pam-1.3.1-pam-namespace-rebase.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -246,6 +250,8 @@ cp %{SOURCE18} .
 %patch73 -p1 -b .pam-access-local
 %patch74 -p1 -b .libpam-support-long-lines
 %patch75 -p1 -b .pam-access-resolve-ip
+%patch76 -p1 -b .pam-inline-pam-asprintf
+%patch77 -p1 -b .pam-namespace-rebase
 
 autoreconf -i
 
@@ -499,6 +505,10 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Mon Jun 16 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-37
+- pam_namespace: fix potential privilege escalation.
+  Resolves: CVE-2025-6020 and RHEL-96724
+
 * Mon Nov 25 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-36
 - pam_access: rework resolving of tokens as hostname.
   Resolves: CVE-2024-10963 and RHEL-66242
