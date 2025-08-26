@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 37%{?dist}
+Release: 38%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -125,7 +125,7 @@ Patch74: pam-1.3.1-libpam-support-long-lines.patch
 Patch75: pam-1.3.1-pam-access-resolve-ip.patch
 # https://github.com/linux-pam/linux-pam/commit/10b80543807e3fc5af5f8bcfd8bb6e219bb3cecc
 Patch76: pam-1.3.1-pam-inline-pam-asprintf.patch
-# Available upstream
+# https://github.com/linux-pam/linux-pam/commit/475bd60c552b98c7eddb3270b0b4196847c0072e
 Patch77: pam-1.3.1-pam-namespace-rebase.patch
 
 %define _pamlibdir %{_libdir}
@@ -505,7 +505,7 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
-* Mon Jun 16 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-37
+* Wed Aug  6 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-38
 - pam_namespace: fix potential privilege escalation.
   Resolves: CVE-2025-6020 and RHEL-96724
 
