@@ -1,0 +1,212 @@
+From 5eccaf9b3488d3f6da800281363697e4e4834e77 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 22 May 2024 11:16:28 +0200
+Subject: [PATCH 1/5] pam_faillock: close the audit socket after use
+
+* modules/pam_faillock/pam_faillock.c (check_tally): Close the audit
+socket when it will no longer be used.
+
+```
+Error: RESOURCE_LEAK (CWE-772):
+Linux-PAM-1.6.0/modules/pam_faillock/pam_faillock.c:247: open_fn: Returning handle opened by "audit_open".
+Linux-PAM-1.6.0/modules/pam_faillock/pam_faillock.c:247: var_assign: Assigning: "audit_fd" = handle returned from "audit_open()".
+Linux-PAM-1.6.0/modules/pam_faillock/pam_faillock.c:256: noescape: Resource "audit_fd" is not freed or pointed-to in "audit_log_user_message".
+Linux-PAM-1.6.0/modules/pam_faillock/pam_faillock.c:258: leaked_handle: Handle variable "audit_fd" going out of scope leaks the handle.
+256|                                   audit_log_user_message(audit_fd, AUDIT_RESP_ACCT_UNLOCK_TIMED, buf,
+257|                                           rhost, NULL, tty, 1);
+258|->                         }
+259|   #endif
+260|                           opts->flags |= FAILLOCK_FLAG_UNLOCKED;
+```
+
+Resolves: https://issues.redhat.com/browse/RHEL-36475
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_faillock/pam_faillock.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/modules/pam_faillock/pam_faillock.c b/modules/pam_faillock/pam_faillock.c
+index e636a24e..f39a9d95 100644
+--- a/modules/pam_faillock/pam_faillock.c
++++ b/modules/pam_faillock/pam_faillock.c
+@@ -255,6 +255,7 @@ check_tally(pam_handle_t *pamh, struct options *opts, struct tally_data *tallies
+ 				snprintf(buf, sizeof(buf), "op=pam_faillock suid=%u ", opts->uid);
+ 				audit_log_user_message(audit_fd, AUDIT_RESP_ACCT_UNLOCK_TIMED, buf,
+ 					rhost, NULL, tty, 1);
++				audit_close(audit_fd);
+ 			}
+ #endif
+ 			opts->flags |= FAILLOCK_FLAG_UNLOCKED;
+-- 
+2.45.2
+
+
+From d00f6cb366b492de455f9b72fcbd2e49abf323e0 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 22 May 2024 11:20:02 +0200
+Subject: [PATCH 2/5] pam_rootok: close the audit socket on error path
+
+* modules/pam_rootok/pam_rootok.c (log_callback): Close the audit socket
+if vasprintf returned an error.
+
+```
+Error: RESOURCE_LEAK (CWE-772):
+Linux-PAM-1.6.0/modules/pam_rootok/pam_rootok.c:59: open_fn: Returning handle opened by "audit_open".
+Linux-PAM-1.6.0/modules/pam_rootok/pam_rootok.c:59: var_assign: Assigning: "audit_fd" = handle returned from "audit_open()".
+Linux-PAM-1.6.0/modules/pam_rootok/pam_rootok.c:69: leaked_handle: Handle variable "audit_fd" going out of scope leaks the handle.
+67|           va_end(ap);
+68|           if (ret < 0) {
+69|->                 return 0;
+70|           }
+71|           audit_log_user_avc_message(audit_fd, AUDIT_USER_AVC, buf, NULL, NULL,
+```
+
+Resolves: https://issues.redhat.com/browse/RHEL-36475
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_rootok/pam_rootok.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/modules/pam_rootok/pam_rootok.c b/modules/pam_rootok/pam_rootok.c
+index 6d2dfa07..1b88fb19 100644
+--- a/modules/pam_rootok/pam_rootok.c
++++ b/modules/pam_rootok/pam_rootok.c
+@@ -66,6 +66,7 @@ log_callback (int type UNUSED, const char *fmt, ...)
+ 	ret = vasprintf (&buf, fmt, ap);
+ 	va_end(ap);
+ 	if (ret < 0) {
++		audit_close(audit_fd);
+ 		return 0;
+ 	}
+ 	audit_log_user_avc_message(audit_fd, AUDIT_USER_AVC, buf, NULL, NULL,
+-- 
+2.45.2
+
+
+From 1ca5bfed50bd9f6c2f1e3e36c2df3253923dadf6 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 22 May 2024 12:27:00 +0200
+Subject: [PATCH 3/5] pam_timestamp: close the timestamp file on error path
+
+* modules/pam_timestamp/pam_timestamp.c (pam_sm_authenticate)
+[WITH_OPENSSL]: Close the timestamp file if hmac_size returned
+an error.
+
+```
+Error: RESOURCE_LEAK (CWE-772):
+Linux-PAM-1.6.0/modules/pam_timestamp/pam_timestamp.c:450: open_fn: Returning handle opened by "open". [Note: The source code implementation of the function has been overridden by a user model.]
+Linux-PAM-1.6.0/modules/pam_timestamp/pam_timestamp.c:450: var_assign: Assigning: "fd" = handle returned from "open(path, 131072)".
+Linux-PAM-1.6.0/modules/pam_timestamp/pam_timestamp.c:460: noescape: Resource "fd" is not freed or pointed-to in "fstat".
+Linux-PAM-1.6.0/modules/pam_timestamp/pam_timestamp.c:484: leaked_handle: Handle variable "fd" going out of scope leaks the handle.
+482|   #ifdef WITH_OPENSSL
+483|                   if (hmac_size(pamh, debug, &maclen)) {
+484|->                         return PAM_AUTH_ERR;
+485|                   }
+486|   #else
+```
+
+Resolves: https://issues.redhat.com/browse/RHEL-36475
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_timestamp/pam_timestamp.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/modules/pam_timestamp/pam_timestamp.c b/modules/pam_timestamp/pam_timestamp.c
+index 7c5457c4..edecc052 100644
+--- a/modules/pam_timestamp/pam_timestamp.c
++++ b/modules/pam_timestamp/pam_timestamp.c
+@@ -481,6 +481,7 @@ pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **argv)
+ 
+ #ifdef WITH_OPENSSL
+ 		if (hmac_size(pamh, debug, &maclen)) {
++			close(fd);
+ 			return PAM_AUTH_ERR;
+ 		}
+ #else
+-- 
+2.45.2
+
+
+From 667204d7e3e4a0341c529f7566d62dd64dd80866 Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 22 May 2024 12:25:34 +0200
+Subject: [PATCH 4/5] pam_namespace: free SELinux context
+
+* modules/pam_namespace/pam_namespace.c [WITH_SELINUX] (form_context):
+Free SELinux context before returning.
+
+```
+Error: RESOURCE_LEAK (CWE-772):
+Linux-PAM-1.6.0/modules/pam_namespace/pam_namespace.c:928: alloc_arg: "getexeccon" allocates memory that is stored into "scon".
+Linux-PAM-1.6.0/modules/pam_namespace/pam_namespace.c:1004: leaked_storage: Variable "scon" going out of scope leaks the storage it points to.
+1002|           }
+1003|           /* Should never get here */
+1004|->         return PAM_SUCCESS;
+1005|   }
+1006|   #endif
+```
+
+Resolves: https://issues.redhat.com/browse/RHEL-36475
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_namespace/pam_namespace.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/modules/pam_namespace/pam_namespace.c b/modules/pam_namespace/pam_namespace.c
+index e499d95a..781dac20 100644
+--- a/modules/pam_namespace/pam_namespace.c
++++ b/modules/pam_namespace/pam_namespace.c
+@@ -1003,6 +1003,7 @@ static int form_context(const struct polydir_s *polyptr,
+ 		return rc;
+ 	}
+ 	/* Should never get here */
++	freecon(scon);
+ 	return PAM_SUCCESS;
+ }
+ #endif
+-- 
+2.45.2
+
+
+From bd2f695b3d89efe0c52bba975f9540634125178a Mon Sep 17 00:00:00 2001
+From: Iker Pedrosa <ipedrosa@redhat.com>
+Date: Wed, 22 May 2024 12:29:07 +0200
+Subject: [PATCH 5/5] pam_namespace: free SELinux context on error path
+
+* modules/pam_namespace/pam_namespace.c (create_polydir) [WITH_SELINUX]:
+Free SELinux context in case of an error.
+
+```
+Error: RESOURCE_LEAK (CWE-772):
+Linux-PAM-1.6.0/modules/pam_namespace/pam_namespace.c:1433: alloc_arg: "getfscreatecon_raw" allocates memory that is stored into "oldcon_raw".
+Linux-PAM-1.6.0/modules/pam_namespace/pam_namespace.c:1462: leaked_storage: Variable "oldcon_raw" going out of scope leaks the storage it points to.
+1460|               pam_syslog(idata->pamh, LOG_ERR,
+1461|                          "Error creating directory %s: %m", dir);
+1462|->             return PAM_SESSION_ERR;
+1463|       }
+1464|
+```
+
+Resolves: https://issues.redhat.com/browse/RHEL-36475
+Signed-off-by: Iker Pedrosa <ipedrosa@redhat.com>
+---
+ modules/pam_namespace/pam_namespace.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/modules/pam_namespace/pam_namespace.c b/modules/pam_namespace/pam_namespace.c
+index 781dac20..2dab49ef 100644
+--- a/modules/pam_namespace/pam_namespace.c
++++ b/modules/pam_namespace/pam_namespace.c
+@@ -1462,6 +1462,9 @@ static int create_polydir(struct polydir_s *polyptr,
+     if (rc == -1) {
+             pam_syslog(idata->pamh, LOG_ERR,
+                        "Error creating directory %s: %m", dir);
++#ifdef WITH_SELINUX
++            freecon(oldcon_raw);
++#endif
+             return PAM_SESSION_ERR;
+     }
+ 
+-- 
+2.45.2
+
