@@ -4,7 +4,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.6.1
-Release: 7%{?dist}
+Release: 8%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp and pam_loginuid modules are GPLv2+.
@@ -33,6 +33,10 @@ Patch5:  pam-1.6.1-pam-env-econf-read-file-fixes.patch
 Patch6:  pam-1.6.1-pam-access-local.patch
 # https://github.com/linux-pam/linux-pam/commit/940747f88c16e029b69a74e80a2e94f65cb3e628
 Patch7:  pam-1.6.1-pam-access-resolve-ip.patch
+# https://github.com/linux-pam/linux-pam/commit/10b80543807e3fc5af5f8bcfd8bb6e219bb3cecc
+Patch8: pam-1.6.1-pam-inline-pam-asprintf.patch
+# https://github.com/linux-pam/linux-pam/commit/976c20079358d133514568fc7fd95c02df8b5773
+Patch9:  pam-1.6.1-pam-namespace-rebase.patch
 
 %{load:%{SOURCE3}}
 
@@ -130,6 +134,8 @@ cp %{SOURCE18} .
 %patch -P 5 -p1 -b .pam-env-econf-read-file-fixes
 %patch -P 6 -p1 -b .pam-access-local
 %patch -P 7 -p1 -b .pam-access-resolve-ip
+%patch -P 8 -p1 -b .pam-inline-pam-asprintf
+%patch -P 9 -p1 -b .pam-namespace-rebase
 
 autoreconf -i
 
@@ -368,6 +374,10 @@ done
 %{_pam_libdir}/libpam_misc.so.%{so_ver}*
 
 %changelog
+* Tue Jul  1 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.6.1-8
+- pam_namespace: fix potential privilege escalation.
+  Resolves: CVE-2025-6020 and RHEL-101174
+
 * Thu Nov 21 2024 Iker Pedrosa <ipedrosa@redhat.com> - 1.6.1-7
 - pam_access: rework resolving of tokens as hostname.
   Resolves: CVE-2024-10963 and RHEL-66241
