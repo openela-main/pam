@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.3.1
-Release: 38%{?dist}
+Release: 39%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -127,6 +127,10 @@ Patch75: pam-1.3.1-pam-access-resolve-ip.patch
 Patch76: pam-1.3.1-pam-inline-pam-asprintf.patch
 # https://github.com/linux-pam/linux-pam/commit/475bd60c552b98c7eddb3270b0b4196847c0072e
 Patch77: pam-1.3.1-pam-namespace-rebase.patch
+# https://github.com/linux-pam/linux-pam/commit/2c711ce57ced9f97c2cf4c8d59c1730447a7bd7f
+# https://github.com/linux-pam/linux-pam/commit/51a06bc8cc2278c6e81c9c08a9381c9eb0d2de96
+# https://github.com/linux-pam/linux-pam/commit/470b5bdd8fd29d6b35e3a80f9a57bdd4b2438200
+Patch78: pam-1.3.1-pam-unix-blank-expiration.patch
 
 %define _pamlibdir %{_libdir}
 %define _moduledir %{_libdir}/security
@@ -252,6 +256,7 @@ cp %{SOURCE18} .
 %patch75 -p1 -b .pam-access-resolve-ip
 %patch76 -p1 -b .pam-inline-pam-asprintf
 %patch77 -p1 -b .pam-namespace-rebase
+%patch78 -p1 -b .pam-unix-blank-expiration
 
 autoreconf -i
 
@@ -505,6 +510,10 @@ done
 %doc doc/specs/rfc86.0.txt
 
 %changelog
+* Fri Nov 14 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-39
+- pam_unix: sync expiry checks with shadow.
+  Resolves: RHEL-70476
+
 * Wed Aug  6 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.3.1-38
 - pam_namespace: fix potential privilege escalation.
   Resolves: CVE-2025-6020 and RHEL-96724
