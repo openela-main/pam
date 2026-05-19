@@ -4,7 +4,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.6.1
-Release: 8%{?dist}
+Release: 9%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp and pam_loginuid modules are GPLv2+.
@@ -37,6 +37,8 @@ Patch7:  pam-1.6.1-pam-access-resolve-ip.patch
 Patch8: pam-1.6.1-pam-inline-pam-asprintf.patch
 # https://github.com/linux-pam/linux-pam/commit/976c20079358d133514568fc7fd95c02df8b5773
 Patch9:  pam-1.6.1-pam-namespace-rebase.patch
+# https://github.com/linux-pam/linux-pam/commit/7d96d452e65ba5dec73f2c77104113977dd3aeb1
+Patch10: pam-1.6.1-pam-faillock-skip.patch
 
 %{load:%{SOURCE3}}
 
@@ -136,6 +138,7 @@ cp %{SOURCE18} .
 %patch -P 7 -p1 -b .pam-access-resolve-ip
 %patch -P 8 -p1 -b .pam-inline-pam-asprintf
 %patch -P 9 -p1 -b .pam-namespace-rebase
+%patch -P 10 -p1 -b .pam-faillock-skip
 
 autoreconf -i
 
@@ -374,6 +377,10 @@ done
 %{_pam_libdir}/libpam_misc.so.%{so_ver}*
 
 %changelog
+* Mon Dec  1 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.6.1-9
+- pam_faillock: skip clearing user's failed attempt.
+  Resolves: RHEL-130871
+
 * Tue Jul  1 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.6.1-8
 - pam_namespace: fix potential privilege escalation.
   Resolves: CVE-2025-6020 and RHEL-101174
