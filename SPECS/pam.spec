@@ -4,7 +4,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.6.1
-Release: 9%{?dist}
+Release: 9%{?dist}.1
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp and pam_loginuid modules are GPLv2+.
@@ -39,6 +39,8 @@ Patch8: pam-1.6.1-pam-inline-pam-asprintf.patch
 Patch9:  pam-1.6.1-pam-namespace-rebase.patch
 # https://github.com/linux-pam/linux-pam/commit/7d96d452e65ba5dec73f2c77104113977dd3aeb1
 Patch10: pam-1.6.1-pam-faillock-skip.patch
+# https://github.com/linux-pam/linux-pam/commit/30708d973b63891bf700299ce3ae0f1086398284
+Patch11: pam-1.6.1-CVE-2026-54411.patch
 
 %{load:%{SOURCE3}}
 
@@ -139,6 +141,7 @@ cp %{SOURCE18} .
 %patch -P 8 -p1 -b .pam-inline-pam-asprintf
 %patch -P 9 -p1 -b .pam-namespace-rebase
 %patch -P 10 -p1 -b .pam-faillock-skip
+%patch -P 11 -p1 -b .CVE-2026-54411
 
 autoreconf -i
 
@@ -377,6 +380,10 @@ done
 %{_pam_libdir}/libpam_misc.so.%{so_ver}*
 
 %changelog
+* Sun Jul 12 2026 RHEL Packaging Agent <redhat-ymir-agent@redhat.com> - 1.6.1-9.1
+- pam_userdb: fix password comparison timing leak.
+  Resolves: CVE-2026-54411 and RHEL-191704
+
 * Mon Dec  1 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.6.1-9
 - pam_faillock: skip clearing user's failed attempt.
   Resolves: RHEL-130871
