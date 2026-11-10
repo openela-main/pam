@@ -3,7 +3,7 @@
 Summary: An extensible library which provides authentication for applications
 Name: pam
 Version: 1.5.1
-Release: 28%{?dist}.1
+Release: 29%{?dist}
 # The library is BSD licensed with option to relicense as GPLv2+
 # - this option is redundant as the BSD license allows that anyway.
 # pam_timestamp, pam_loginuid, and pam_console modules are GPLv2+.
@@ -85,9 +85,11 @@ Patch26: pam-1.5.1-pam-inline-pam-asprintf.patch
 Patch27: pam-1.5.1-pam-namespace-rebase.patch
 # https://github.com/linux-pam/linux-pam/commit/7d96d452e65ba5dec73f2c77104113977dd3aeb1
 Patch28: pam-1.5.1-pam-faillock-skip.patch
-# https://github.com/linux-pam/linux-pam/commit/c11ccdfad1596199713f75a61f34672f7529ab73
-# https://github.com/linux-pam/linux-pam/commit/30708d973b63891bf700299ce3ae0f1086398284
-Patch29: pam-1.5.1-CVE-2026-54411.patch
+# https://github.com/linux-pam/linux-pam/commit/83c344ee5a5eb4796e435bce897b83cae3465243
+# https://github.com/linux-pam/linux-pam/commit/fc927d8f1a6d81e5bcf58096871684b35b793fe2
+Patch29: pam-1.5.1-pam-access-uid-gid-access-conf.patch
+# https://github.com/linux-pam/linux-pam/commit/2e7910e3be93d99e865d9b86c38a1b56e4a95d6e
+Patch30: pam-1.5.1-pam-lastlog-file-locking.patch
 
 %global _pamlibdir %{_libdir}
 %global _moduledir %{_libdir}/security
@@ -198,7 +200,8 @@ cp %{SOURCE18} .
 %patch26 -p1 -b .pam-inline-pam-asprintf
 %patch27 -p1 -b .pam-namespace-rebase
 %patch28 -p1 -b .pam-faillock-skip
-%patch29 -p1 -b .CVE-2026-54411
+%patch29 -p1 -b .pam-access-uid-gid-access-con
+%patch30 -p1 -b .pam-lastlog-file-locking
 
 autoreconf -i
 
@@ -454,9 +457,10 @@ done
 %doc doc/sag/*.txt doc/sag/html
 
 %changelog
-* Mon Aug 24 2026 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-28.1
-- pam_userdb: fix password comparison timing leak.
-  Resolves: CVE-2026-54411 and RHEL-191703
+* Thu Apr  9 2026 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-29
+- pam_access: support UID and GID in access.conf
+  Resolves: RHEL-119868
+- pam_lastlog: fix file locking. Resolves: RHEL-118522
 
 * Wed Dec 10 2025 Iker Pedrosa <ipedrosa@redhat.com> - 1.5.1-28
 - pam_faillock: skip clearing user's failed attempt.

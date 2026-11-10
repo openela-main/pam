@@ -1,0 +1,176 @@
+diff -up Linux-PAM-1.5.1/libpam/include/pam_inline.h.pam-access-uid-gid-access-conf Linux-PAM-1.5.1/libpam/include/pam_inline.h
+--- Linux-PAM-1.5.1/libpam/include/pam_inline.h.pam-access-uid-gid-access-conf	2026-04-07 16:43:45.979027569 +0200
++++ Linux-PAM-1.5.1/libpam/include/pam_inline.h	2026-04-07 16:43:45.984864383 +0200
+@@ -41,6 +41,26 @@
+ #define PAM_ARRAY_SIZE(a_)		(sizeof(a_) / sizeof((a_)[0]) + PAM_MUST_BE_ARRAY(a_))
+ 
+ /*
++ * Zero-extend a signed integer type to unsigned long long.
++ */
++# define zero_extend_signed_to_ull(v_) \
++	(sizeof(v_) == sizeof(char) ? (unsigned long long) (unsigned char) (v_) : \
++	 sizeof(v_) == sizeof(short) ? (unsigned long long) (unsigned short) (v_) : \
++	 sizeof(v_) == sizeof(int) ? (unsigned long long) (unsigned int) (v_) : \
++	 sizeof(v_) == sizeof(long) ? (unsigned long long) (unsigned long) (v_) : \
++	 (unsigned long long) (v_))
++
++/*
++ * Sign-extend an unsigned integer type to long long.
++ */
++# define sign_extend_unsigned_to_ll(v_) \
++	(sizeof(v_) == sizeof(char) ? (long long) (signed char) (v_) : \
++	 sizeof(v_) == sizeof(short) ? (long long) (signed short) (v_) : \
++	 sizeof(v_) == sizeof(int) ? (long long) (signed int) (v_) : \
++	 sizeof(v_) == sizeof(long) ? (long long) (signed long) (v_) : \
++	 (long long) (v_))
++
++/*
+  * Returns NULL if STR does not start with PREFIX,
+  * or a pointer to the first char in STR after PREFIX.
+  * The length of PREFIX is specified by PREFIX_LEN.
+diff -up Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-uid-gid-access-conf Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml
+--- Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml.pam-access-uid-gid-access-conf	2026-04-07 16:43:45.976429463 +0200
++++ Linux-PAM-1.5.1/modules/pam_access/access.conf.5.xml	2026-04-07 16:43:45.984973066 +0200
+@@ -67,10 +67,10 @@
+     <para>
+       The second field, the
+       <replaceable>users</replaceable>/<replaceable>group</replaceable>
+-      field, should be a list of one or more login names, group names, or
++      field, should be a list of one or more login names, group names, uid, gid, or
+       <emphasis>ALL</emphasis> (which always matches). To differentiate
+       user entries from group entries, group entries should be written
+-      with brackets, e.g. <emphasis>(group)</emphasis>.
++      with brackets, e.g. <emphasis>(group)</emphasis> or <emphasis>(gid)</emphasis>.
+     </para>
+ 
+     <para>
+@@ -175,6 +175,12 @@
+     <para>-:root:ALL</para>
+ 
+     <para>
++      A user with uid <emphasis>1003</emphasis> and a group with gid
++      <emphasis>1000</emphasis> should be allowed to get access
++      from all other sources.
++    </para>
++    <para>+:(1000) 1003:ALL</para>
++    <para>
+       User <emphasis>foo</emphasis> and members of netgroup
+       <emphasis>admins</emphasis> should be allowed to get access
+       from all sources. This will only work if netgroup service is available.
+diff -up Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-uid-gid-access-conf Linux-PAM-1.5.1/modules/pam_access/pam_access.c
+--- Linux-PAM-1.5.1/modules/pam_access/pam_access.c.pam-access-uid-gid-access-conf	2026-04-07 16:43:45.976751995 +0200
++++ Linux-PAM-1.5.1/modules/pam_access/pam_access.c	2026-04-07 16:48:45.995605657 +0200
+@@ -254,7 +254,7 @@ typedef int match_func (pam_handle_t *, char *, struct login_info *);
+ static int list_match (pam_handle_t *, char *, char *, struct login_info *,
+ 		       match_func *);
+ static int user_match (pam_handle_t *, char *, struct login_info *);
+-static int group_match (pam_handle_t *, const char *, const char *, int);
++static int group_match (pam_handle_t *, char *, const char *, int);
+ static int from_match (pam_handle_t *, char *, struct login_info *);
+ static int remote_match (pam_handle_t *, char *, struct login_info *);
+ static int string_match (pam_handle_t *, const char *, const char *, int);
+@@ -527,7 +527,30 @@ netgroup_match (pam_handle_t *pamh, cons
+   return retval;
+ }
+ 
+-/* user_match - match a username against one token */
++/* user_name_or_uid_match - match a username or user uid against one token */
++static int
++user_name_or_uid_match(pam_handle_t *pamh, const char *tok,
++		       const struct login_info *item)
++{
++    /* ALL or exact match of username */
++    int rv = string_match(pamh, tok, item->user->pw_name, item->debug);
++    if (rv != NO)
++	return rv;
++
++    if (tok[strspn(tok, "0123456789")] != '\0')
++	return NO;
++
++    char buf[sizeof(long long) * 3 + 1];
++    snprintf(buf, sizeof(buf), "%llu",
++	     zero_extend_signed_to_ull(item->user->pw_uid));
++    if (item->debug)
++	pam_syslog(pamh, LOG_DEBUG, "user_match: tok=%s, uid=%s", tok, buf);
++
++    /* check for exact match of uid */
++    return string_match (pamh, tok, buf, item->debug);
++}
++
++/* user_match - match a user against one token */
+ 
+ static int
+ user_match (pam_handle_t *pamh, char *tok, struct login_info *item)
+@@ -578,7 +601,7 @@ user_match (pam_handle_t *pamh, char *to
+ 		hostname = item->hostname;
+ 	}
+         return (netgroup_match (pamh, tok + 1, hostname, string, item->debug));
+-    } else if ((rv=string_match (pamh, tok, string, item->debug)) != NO) /* ALL or exact match */
++    } else if ((rv=user_name_or_uid_match(pamh, tok, item)) != NO) /* ALL or exact match */
+       return rv;
+     else if (item->only_new_group_syntax == NO &&
+ 	     pam_modutil_user_in_group_nam_nam (pamh,
+@@ -590,14 +613,41 @@ user_match (pam_handle_t *pamh, char *to
+ }
+ 
+ 
++/* group_name_or_gid_match - match a group name or group gid against one token */
++static int
++group_name_or_gid_match(pam_handle_t *pamh, const char *tok,
++			const char *usr, int debug)
++{
++    /* check for exact match of group name */
++    if (pam_modutil_user_in_group_nam_nam(pamh, usr, tok) != NO)
++	return YES;
++
++    if (tok[strspn(tok, "0123456789")] != '\0')
++	return NO;
++
++    char *endptr = NULL;
++    errno = 0;
++    unsigned long int ul = strtoul(tok, &endptr, 10);
++    gid_t gid = (gid_t) ul;
++    if (errno != 0
++	|| tok == endptr
++	|| *endptr != '\0'
++	|| (unsigned long) zero_extend_signed_to_ull(gid) != ul) {
++	return NO;
++    }
++
++    if (debug)
++	pam_syslog(pamh, LOG_DEBUG, "group_match: user=%s, gid=%s", usr, tok);
++
++    /* check for exact match of gid */
++    return pam_modutil_user_in_group_nam_gid(pamh, usr, gid);
++}
++
+ /* group_match - match a username against token named group */
+ 
+ static int
+-group_match (pam_handle_t *pamh, const char *tok, const char* usr,
+-    int debug)
++group_match (pam_handle_t *pamh, char *tok, const char* usr, int debug)
+ {
+-    char grptok[BUFSIZ];
+-
+     if (debug)
+         pam_syslog (pamh, LOG_DEBUG,
+ 		    "group_match: grp=%s, user=%s", tok, usr);
+@@ -606,13 +656,13 @@ group_match (pam_handle_t *pamh, const c
+         return NO;
+ 
+     /* token is received under the format '(...)' */
+-    memset(grptok, 0, BUFSIZ);
+-    strncpy(grptok, tok + 1, strlen(tok) - 2);
++    tok++;
++    tok[strlen(tok) - 1] = '\0';
+ 
+-    if (pam_modutil_user_in_group_nam_nam(pamh, usr, grptok))
++    if (group_name_or_gid_match (pamh, tok, usr, debug))
+         return YES;
+ 
+-  return NO;
++    return NO;
+ }
+ 
+ 
